@@ -1,0 +1,26 @@
+{
+  "name": "elm-pool",
+  "version": "0.0.1",
+  "description": "A pool game built with Elm, w0rm/elm-physics, and ianmackenzie/elm-3d-scene.",
+  "main": "index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "elm-test": "latest-0.19.1"
+  },
+  "scripts": {
+    "test": "elm-test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0rm/elm-pool.git"
+  },
+  "author": "Andrey Kuzmin <unsoundscapes@gmail.com> (https://unsoundscapes.com/)",
+  "contributors": [
+    "Jared M. Smith <absynce@gmail.com> (https://jaredmsmith.com/)"
+  ],
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/w0rm/elm-pool/issues"
+  },
+  "homepage": "https://github.com/w0rm/elm-pool#readme"
+}
