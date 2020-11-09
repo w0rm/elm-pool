@@ -1,0 +1,32 @@
+name: Deploy to itch.io
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+      
+      - run: npm install -g elm@latest-0.19.1 uglify-js@3.4.7
+      
+      - run: |
+          mkdir -p dest
+          elm make src/Main.elm --optimize --output dest/elm-temp.js
+          uglifyjs dest/elm-temp.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dest/elm.js
+          rm dest/elm-temp.js
+          cp -R index.html src/img dest
+          
+      - uses: josephbmanley/butler-publish-itchio-action@master
+        env:
+          BUTLER_CREDENTIALS: ${{ secrets.BUTLER_CREDENTIALS }}
+          CHANNEL: html
+          ITCH_GAME: pool
+          ITCH_USER: unsoundscapes
+          PACKAGE: dest
