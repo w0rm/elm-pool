@@ -122,12 +122,12 @@ init _ =
                         { defaultOptions
                             | minify = Texture.linear
                         }
-                        ("../img/balls/" ++ String.fromInt number ++ ".png")
+                        ("img/balls/" ++ String.fromInt number ++ ".png")
                         |> Task.attempt (Result.toMaybe >> GotBallTexture number)
                 )
                 (List.range 1 15)
             )
-        , Material.load "../img/roughness.jpg"
+        , Material.load "img/roughness.jpg"
             |> Task.attempt (Result.toMaybe >> GotRoughnessTexture)
         , Task.perform
             (\{ viewport } ->
