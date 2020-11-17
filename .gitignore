@@ -1,6 +1,7 @@
+.DS_Store
 # elm-package generated files
 elm-stuff
 # elm-repl generated files
 repl-temp-*
-# Node modules
-node_modules
+# build destination
+dest

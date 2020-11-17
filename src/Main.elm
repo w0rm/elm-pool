@@ -33,7 +33,6 @@ import Scene3d
 import Scene3d.Light
 import Scene3d.Material as Material
 import SketchPlane3d
-import SolidColor
 import Speed
 import Task
 import Vector2d
@@ -123,12 +122,12 @@ init _ =
                         { defaultOptions
                             | minify = Texture.linear
                         }
-                        ("../img/balls/" ++ String.fromInt number ++ ".png")
+                        ("img/balls/" ++ String.fromInt number ++ ".png")
                         |> Task.attempt (Result.toMaybe >> GotBallTexture number)
                 )
                 (List.range 1 15)
             )
-        , Material.load "../img/roughness.jpg"
+        , Material.load "img/roughness.jpg"
             |> Task.attempt (Result.toMaybe >> GotRoughnessTexture)
         , Task.perform
             (\{ viewport } ->
@@ -222,8 +221,16 @@ view { world, dimensions, distance, azimuth, elevation, mouseAction } =
         sunlight =
             Scene3d.Light.directional (Scene3d.Light.castsShadows True)
                 { direction = Direction3d.xyZ (Angle.degrees 135) (Angle.degrees -60)
-                , intensity = Illuminance.lux 80000
-                , chromaticity = Scene3d.Light.sunlight
+                , intensity = Illuminance.lux 10000
+                , chromaticity = Scene3d.Light.daylight
+                }
+
+        environmentalLighting =
+            Scene3d.Light.soft
+                { upDirection = Direction3d.positiveZ
+                , chromaticity = Scene3d.Light.daylight
+                , intensityAbove = Illuminance.lux 3000
+                , intensityBelow = Illuminance.lux 0
                 }
 
         entities =
@@ -267,9 +274,9 @@ view { world, dimensions, distance, azimuth, elevation, mouseAction } =
             , antialiasing = Scene3d.noAntialiasing
             , camera = camera distance azimuth elevation mouseAction world
             , entities = entitiesWithCue
-            , lights = Scene3d.oneLight sunlight
-            , exposure = Scene3d.exposureValue 15
-            , whiteBalance = Scene3d.Light.fluorescent
+            , lights = Scene3d.twoLights environmentalLighting sunlight
+            , exposure = Scene3d.exposureValue 13
+            , whiteBalance = Scene3d.Light.daylight
             , clipDepth = Length.meters 0.1
             , background = Scene3d.backgroundColor Color.black
             , toneMapping = Scene3d.noToneMapping
