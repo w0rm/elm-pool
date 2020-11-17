@@ -8,7 +8,6 @@ import Dict exposing (Dict)
 import Direction3d
 import Length exposing (Meters, meters, millimeters)
 import Mass
-import Palette.Tango as Tango
 import Physics.Body as Body exposing (Body)
 import Physics.Coordinates exposing (BodyCoordinates)
 import Physics.Material exposing (Material)
@@ -17,7 +16,6 @@ import Point3d
 import Quantity exposing (Quantity(..))
 import Scene3d exposing (Entity)
 import Scene3d.Material as Material
-import SolidColor exposing (SolidColor)
 import Sphere3d exposing (Sphere3d)
 import Vector3d
 
@@ -149,9 +147,7 @@ floor =
         { id = Floor
         , entity =
             Scene3d.quad
-                (Material.matte <|
-                    solidColorToColor Tango.aluminum6
-                )
+                (Material.matte (Color.rgb255 46 52 54))
                 (Point3d.meters -sizes.floorHalfSize -sizes.floorHalfSize 0)
                 (Point3d.meters sizes.floorHalfSize -sizes.floorHalfSize 0)
                 (Point3d.meters sizes.floorHalfSize sizes.floorHalfSize 0)
@@ -291,12 +287,3 @@ tableWalls =
                 , bounciness = 0.6
                 }
             )
-
-
-solidColorToColor : SolidColor -> Color
-solidColorToColor solidColor =
-    let
-        ( red, green, blue ) =
-            SolidColor.toRGB solidColor
-    in
-    Color.rgb255 (round red) (round green) (round blue)
