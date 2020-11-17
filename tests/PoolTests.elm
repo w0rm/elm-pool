@@ -22,9 +22,89 @@ suite =
                         Expect.fail "How do I test this?"
                     )
             ]
+        , describe "view"
+            [ describe "currentPlayer"
+                [ test "no events sent, still current player's turn"
+                    (\_ ->
+                        let
+                            nextAction =
+                                Pool.start
+                                    |> Pool.rack (Time.millisToPosix 0)
+                                    |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
+                                    |> Pool.playerShot []
+                        in
+                        case nextAction of
+                            Pool.NextShot pool ->
+                                pool
+                                    |> Pool.currentPlayer
+                                    |> Expect.equal 0
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be Pool.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "after player shoots cue hits nothing, next players turn"
+                    (\_ ->
+                        let
+                            nextAction =
+                                Pool.start
+                                    |> Pool.rack (Time.millisToPosix 0)
+                                    |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
+                                    |> Pool.playerShot
+                                        [ Pool.cueStruck (Time.millisToPosix 0)
+                                        ]
+                        in
+                        case nextAction of
+                            Pool.NextShot pool ->
+                                pool
+                                    |> Pool.currentPlayer
+                                    |> Expect.equal 1
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be Pool.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "after player shoots cue hits nothing, and next player hits nothing, back to first"
+                    (\_ ->
+                        let
+                            nextAction =
+                                Pool.start
+                                    |> Pool.rack (Time.millisToPosix 0)
+                                    |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
+                                    |> Pool.playerShot
+                                        [ Pool.cueStruck (Time.millisToPosix 0)
+                                        ]
+                        in
+                        case nextAction of
+                            Pool.NextShot pool ->
+                                case
+                                    Pool.playerShot
+                                        [ Pool.cueStruck (Time.millisToPosix 1)
+                                        ]
+                                        pool
+                                of
+                                    Pool.NextShot pool2 ->
+                                        pool2
+                                            |> Pool.currentPlayer
+                                            |> Expect.equal 0
+
+                                    other ->
+                                        Expect.fail <|
+                                            "Should be Pool.NextShot, but found this instead:\n"
+                                                ++ Debug.toString other
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be Pool.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                ]
+            ]
         , describe "update"
             [ describe "playerShot"
-                [ test "after player shoots cue into another ball, player wins!"
+                [ test "after player shoots cue into another ball twice, player wins!"
                     (\_ ->
                         let
                             nextAction =
@@ -33,6 +113,7 @@ suite =
                                     |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
                                     |> Pool.playerShot
                                         [ Pool.cueHitBall (Time.millisToPosix 1) Pool.oneBall
+                                        , Pool.cueHitBall (Time.millisToPosix 2) Pool.oneBall
                                         ]
                         in
                         case nextAction of
@@ -71,7 +152,8 @@ suite =
                                     |> Pool.rack (Time.millisToPosix 0)
                                     |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
                                     |> Pool.playerShot
-                                        []
+                                        [ Pool.cueStruck (Time.millisToPosix 0)
+                                        ]
                         in
                         case nextAction of
                             Pool.NextShot _ ->
