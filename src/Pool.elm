@@ -5,6 +5,7 @@ module Pool exposing
     , cueHitBall, cueStruck
     , oneBall
     , WhatHappened(..)
+    , ShotEvent
     )
 
 {-| Pool game rules. Agnostic to game engine.

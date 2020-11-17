@@ -10,20 +10,8 @@ import Time
 suite : Test
 suite =
     describe "Pool"
-        [ describe "init"
-            [ skip <|
-                test "next action is to rack all the balls"
-                    (\_ ->
-                        let
-                            nextAction =
-                                Pool.start
-                                    |> Pool.rack (Time.millisToPosix 0)
-                        in
-                        Expect.fail "How do I test this?"
-                    )
-            ]
-        , describe "view"
-            [ describe "currentPlayer"
+        [ describe "update"
+            [ describe "playerShot"
                 [ test "no events sent, still current player's turn"
                     (\_ ->
                         let
@@ -73,38 +61,21 @@ suite =
                                 Pool.start
                                     |> Pool.rack (Time.millisToPosix 0)
                                     |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
-                                    |> Pool.playerShot
-                                        [ Pool.cueStruck (Time.millisToPosix 0)
-                                        ]
+                                    |> Pool.playerShot [ Pool.cueStruck (Time.millisToPosix 0) ]
+                                    |> andKeepShooting [ Pool.cueStruck (Time.millisToPosix 1) ]
                         in
                         case nextAction of
                             Pool.NextShot pool ->
-                                case
-                                    Pool.playerShot
-                                        [ Pool.cueStruck (Time.millisToPosix 1)
-                                        ]
-                                        pool
-                                of
-                                    Pool.NextShot pool2 ->
-                                        pool2
-                                            |> Pool.currentPlayer
-                                            |> Expect.equal 0
-
-                                    other ->
-                                        Expect.fail <|
-                                            "Should be Pool.NextShot, but found this instead:\n"
-                                                ++ Debug.toString other
+                                pool
+                                    |> Pool.currentPlayer
+                                    |> Expect.equal 0
 
                             other ->
                                 Expect.fail <|
                                     "Should be Pool.NextShot, but found this instead:\n"
                                         ++ Debug.toString other
                     )
-                ]
-            ]
-        , describe "update"
-            [ describe "playerShot"
-                [ test "after player shoots cue into another ball twice, player wins!"
+                , test "after player shoots cue into another ball twice, player wins!"
                     (\_ ->
                         let
                             nextAction =
@@ -117,52 +88,37 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            Pool.GameOver _ ->
-                                Expect.pass
+                            Pool.GameOver pool ->
+                                pool
+                                    |> Pool.currentPlayer
+                                    |> Expect.equal 0
 
                             other ->
                                 Expect.fail <|
                                     "Should be Pool.GameOver, but found this instead:\n"
                                         ++ Debug.toString other
                     )
-                , test "no events sent, still current player's turn"
+                , test "after player shoots cue into another ball, but then misses on next shot, next player must shoot twice to win"
                     (\_ ->
                         let
                             nextAction =
                                 Pool.start
                                     |> Pool.rack (Time.millisToPosix 0)
                                     |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
-                                    |> Pool.playerShot []
+                                    |> Pool.playerShot [ Pool.cueHitBall (Time.millisToPosix 1) Pool.oneBall ]
+                                    |> andKeepShooting [ Pool.cueStruck (Time.millisToPosix 2) ]
+                                    |> andKeepShooting [ Pool.cueHitBall (Time.millisToPosix 3) Pool.oneBall ]
+                                    |> andKeepShooting [ Pool.cueHitBall (Time.millisToPosix 5) Pool.oneBall ]
                         in
                         case nextAction of
-                            Pool.NextShot _ ->
-                                -- TODO: Inspect current player, should still be player 1.
-                                Expect.pass
+                            Pool.GameOver pool ->
+                                pool
+                                    |> Pool.currentPlayer
+                                    |> Expect.equal 1
 
                             other ->
                                 Expect.fail <|
-                                    "Should be Pool.NextShot, but found this instead:\n"
-                                        ++ Debug.toString other
-                    )
-                , test "after player shoots cue hits nothing, next players turn"
-                    (\_ ->
-                        let
-                            nextAction =
-                                Pool.start
-                                    |> Pool.rack (Time.millisToPosix 0)
-                                    |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
-                                    |> Pool.playerShot
-                                        [ Pool.cueStruck (Time.millisToPosix 0)
-                                        ]
-                        in
-                        case nextAction of
-                            Pool.NextShot _ ->
-                                -- TODO: Inspect current player, should be player 2.
-                                Expect.pass
-
-                            other ->
-                                Expect.fail <|
-                                    "Should be Pool.NextShot, but found this instead:\n"
+                                    "Should be Pool.GameOver, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 ]
@@ -170,6 +126,11 @@ suite =
         ]
 
 
-type Player
-    = Player1
-    | Player2
+andKeepShooting : List ( Time.Posix, Pool.ShotEvent ) -> Pool.WhatHappened -> Pool.WhatHappened
+andKeepShooting shotEvents ruling =
+    case ruling of
+        Pool.NextShot pool ->
+            Pool.playerShot shotEvents pool
+
+        _ ->
+            ruling
