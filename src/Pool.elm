@@ -1,6 +1,6 @@
 module Pool exposing
     ( Pool, start
-    , currentPlayer
+    , currentPlayer, currentScore
     , rack, ballPlacedInKitchen, playerShot
     , cueHitBall, cueStruck
     , oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
@@ -18,7 +18,7 @@ module Pool exposing
 
 # View
 
-@docs currentPlayer
+@docs currentPlayer, currentScore
 
 
 # Update
@@ -239,59 +239,20 @@ currentPlayer (Pool ({ player } as poolData)) =
     playerToInt player
 
 
-{-| Recurse through list of events, keeping track of current player. This is the single source of truth approach.
-
-A more efficient way would be to track it separately from events, but also more error-prone.
-
+{-| Get the current score.
 -}
-findCurrentPlayer : InternalEvent -> InternalEvent -> List InternalEvent -> Player -> PoolData -> Int
-findCurrentPlayer eventData1 eventData2 remainingEventData player poolData =
-    let
-        _ =
-            Debug.log "player" player
-    in
-    case remainingEventData of
-        [] ->
-            case ( eventData1, eventData2 ) of
-                ( Racked, BallPlacedInKitchen ) ->
-                    playerToInt player
+currentScore : Pool state -> { player1 : Int, player2 : Int }
+currentScore (Pool ({ ballsHitConsecutively, player } as poolData)) =
+    case player of
+        Player1 ->
+            { player1 = ballsHitConsecutively
+            , player2 = 0
+            }
 
-                ( BallPlacedInKitchen, Shot shotEvents ) ->
-                    Debug.todo "check shot"
-
-                ( Racked, Racked ) ->
-                    -- Nonsense. How do we prevent/indicate this? Error, Maybe?
-                    playerToInt player
-
-                ( Racked, _ ) ->
-                    -- Nonsense. How do we prevent/indicate this? Error, Maybe?
-                    playerToInt player
-
-                ( BallPlacedInKitchen, Racked ) ->
-                    -- Nonsense. How do we prevent/indicate this? Error, Maybe?
-                    playerToInt player
-
-                ( BallPlacedInKitchen, BallPlacedInKitchen ) ->
-                    -- Nonsense. How do we prevent/indicate this? Error, Maybe?
-                    playerToInt player
-
-                ( Shot _, Shot shotEvents ) ->
-                    Debug.todo "check shot"
-
-                ( Shot _, Racked ) ->
-                    -- Nonsense. How do we prevent/indicate this? Error, Maybe?
-                    playerToInt player
-
-                ( Shot _, BallPlacedInKitchen ) ->
-                    -- Nonsense. How do we prevent/indicate this? Error, Maybe?
-                    playerToInt player
-
-        anotherEvent :: otherEvents ->
-            findCurrentPlayer BallPlacedInKitchen
-                anotherEvent
-                otherEvents
-                player
-                poolData
+        Player2 ->
+            { player1 = 0
+            , player2 = ballsHitConsecutively
+            }
 
 
 
@@ -376,11 +337,12 @@ type Event
     = Event EventData
 
 
-type WhatHappened
-    = PlayersFault (Pool AwaitingBallInHand)
-    | NextShot (Pool AwaitingNextShot)
+type
+    WhatHappened
+    -- = PlayersFault (Pool AwaitingBallInHand)
+    = NextShot (Pool AwaitingNextShot)
       -- | NextTurn (Pool AwaitingNextTurn)
-    | GameOver (Pool AwaitingNewGame) -- { winner : Int, loser: Int }
+    | GameOver (Pool AwaitingNewGame) { winner : Int }
     | Error String
 
 
@@ -437,7 +399,7 @@ playerShot shotEvents (Pool data) =
             checkShot shotEvents newPoolData
 
 
-{-| TODO: May need to check for equal times and put things like Racked before BallPlacedInKitchen and so on.
+{-| TODO: May need to check for equal times and put things like Racked before BallPlacedInKitchen.
 -}
 eventTimeComparison : EventData -> EventData -> Order
 eventTimeComparison eventData1 eventData2 =
@@ -451,8 +413,10 @@ checkShot shotEvents poolData =
     case shotEvents of
         [] ->
             if poolData.ballsHitConsecutively >= 2 then
-                GameOver <|
-                    Pool poolData
+                GameOver
+                    (Pool poolData)
+                    { winner = playerToInt poolData.player
+                    }
 
             else
                 NextShot <|
