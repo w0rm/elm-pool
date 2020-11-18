@@ -3,7 +3,7 @@ module Pool exposing
     , currentPlayer
     , rack, ballPlacedInKitchen, playerShot
     , cueHitBall, cueStruck
-    , oneBall
+    , oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
     , WhatHappened(..)
     , ShotEvent
     )
@@ -33,7 +33,7 @@ module Pool exposing
 
 ## Balls
 
-@docs oneBall
+@docs oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
 
 
 ## Ruling
@@ -84,22 +84,97 @@ type Ruling
     | Win
 
 
-type
-    GameFormat
-    -- | Format9Ball
-    -- | Format10Ball
-    = Format8Ball
-
-
 type Ball
     = OneBall
     | TwoBall
     | ThreeBall
+    | FourBall
+    | FiveBall
+    | SixBall
+    | SevenBall
+    | EightBall
+    | NineBall
+    | TenBall
+    | ElevenBall
+    | TwelveBall
+    | ThirteenBall
+    | FourteenBall
+    | FifteenBall
 
 
 oneBall : Ball
 oneBall =
     OneBall
+
+
+twoBall : Ball
+twoBall =
+    TwoBall
+
+
+threeBall : Ball
+threeBall =
+    ThreeBall
+
+
+fourBall : Ball
+fourBall =
+    FourBall
+
+
+fiveBall : Ball
+fiveBall =
+    FiveBall
+
+
+sixBall : Ball
+sixBall =
+    SixBall
+
+
+sevenBall : Ball
+sevenBall =
+    SevenBall
+
+
+eightBall : Ball
+eightBall =
+    EightBall
+
+
+nineBall : Ball
+nineBall =
+    NineBall
+
+
+tenBall : Ball
+tenBall =
+    TenBall
+
+
+elevenBall : Ball
+elevenBall =
+    ElevenBall
+
+
+twelveBall : Ball
+twelveBall =
+    TwelveBall
+
+
+thirteenBall : Ball
+thirteenBall =
+    ThirteenBall
+
+
+fourteenBall : Ball
+fourteenBall =
+    FourteenBall
+
+
+fifteenBall : Ball
+fifteenBall =
+    FifteenBall
 
 
 type Cue
@@ -161,16 +236,6 @@ Zero-based:
 -}
 currentPlayer : Pool state -> Int
 currentPlayer (Pool ({ player } as poolData)) =
-    -- Failed attempt to derive all state from events.
-    -- case events of
-    --     [] ->
-    --         0
-    --
-    --     firstEvent :: [] ->
-    --         0
-    --
-    --     firstEvent :: secondEvent :: otherEvents ->
-    --         findCurrentPlayer firstEvent.event secondEvent.event (List.map .event otherEvents) Player1 poolData
     playerToInt player
 
 
@@ -372,26 +437,6 @@ playerShot shotEvents (Pool data) =
             checkShot shotEvents newPoolData
 
 
-
--- Failed attempt to derive all state from events.
--- case allEventDataSorted |> List.map .event of
---     [] ->
---         Error "Should already be racked and ball placed."
---
---     [ singleEvent ] ->
---         Error "Should already be racked and ball placed."
---
---     Racked :: BallPlacedInKitchen :: [] ->
---         NextShot <|
---             Pool newPoolData
---
---     Racked :: BallPlacedInKitchen :: otherEvents ->
---         checkEvents Racked BallPlacedInKitchen otherEvents newPoolData
---
---     firstEvent :: secondEvent :: otherEvents ->
---         Error "Should be racked, then ball in kitchen first"
-
-
 {-| TODO: May need to check for equal times and put things like Racked before BallPlacedInKitchen and so on.
 -}
 eventTimeComparison : EventData -> EventData -> Order
@@ -399,41 +444,6 @@ eventTimeComparison eventData1 eventData2 =
     compare
         (Time.toMillis Time.utc eventData1.when)
         (Time.toMillis Time.utc eventData2.when)
-
-
-checkEvents : InternalEvent -> InternalEvent -> List InternalEvent -> PoolData -> WhatHappened
-checkEvents eventData1 eventData2 remainingEventData poolData =
-    case remainingEventData of
-        [] ->
-            case ( eventData1, eventData2 ) of
-                ( Racked, BallPlacedInKitchen ) ->
-                    NextShot <|
-                        Pool poolData
-
-                ( BallPlacedInKitchen, Shot shotEvents ) ->
-                    checkShot shotEvents poolData
-
-                ( BallPlacedInKitchen, Racked ) ->
-                    Error "Nonsense, rack before placing ball in the kitchen!"
-
-                ( BallPlacedInKitchen, BallPlacedInKitchen ) ->
-                    -- Once ball is placed in the kitchen, it cannot be moved until a shot is taken.
-                    PlayersFault (Pool poolData)
-
-                ( Racked, Shot _ ) ->
-                    Error "Ball should be placed in kitchen before shot (this state shouldn't happen)"
-
-                ( Racked, Racked ) ->
-                    Error "Only rack once (this state shouldn't happen)"
-
-                ( Shot _, Shot shotEvents ) ->
-                    checkShot shotEvents poolData
-
-                ( Shot _, _ ) ->
-                    Error "Only shots (or ball in hand) after a shot (this state shouldn't happen)"
-
-        anotherEvent :: otherEvents ->
-            checkEvents eventData2 anotherEvent otherEvents poolData
 
 
 checkShot : List ( Time.Posix, ShotEvent ) -> PoolData -> WhatHappened
@@ -468,37 +478,3 @@ checkShot shotEvents poolData =
                     }
             in
             checkShot otherShots newPoolData
-
-
-
--- Failed attempt to derive all state from events.
--- checkShotRecursively : ( Time.Posix, ShotEvent ) -> ( Time.Posix, ShotEvent ) -> List ( Time.Posix, ShotEvent ) -> PoolData -> WhatHappened
--- checkShotRecursively ( previousShotTime, previousShot ) (( currentShotTime, currentShotEvent ) as currentShot) otherShotEvents poolData =
---     case otherShotEvents of
---         [] ->
---             case ( previousShot, currentShotEvent ) of
---                 ( CueStruck, CueHitBall _ ) ->
---                     NextShot <|
---                         Pool poolData
---
---                 ( CueHitBall _, CueHitBall _ ) ->
---                     GameOver <|
---                         Pool poolData
---
---         ( CueHitBall _, CueStruck, _ ) ->
---             Error "Cue should only be struck at beginning of shot"
---
---         ( CueStruck, CueStruck, _ ) ->
---             Error "Cue should only be struck at beginning of shot"
---
---         nextShot :: moreShotEvents ->
---             checkShotRecursively currentShot nextShot moreShotEvents poolData
-
-
-stopTheGame : Pool { a | gameStoppable : Bool } -> Pool AwaitingRack
-stopTheGame =
-    Debug.todo ""
-
-
-type Rack
-    = Rack_ (List Ball)

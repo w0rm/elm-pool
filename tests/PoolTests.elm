@@ -107,8 +107,8 @@ suite =
                                     |> Pool.ballPlacedInKitchen (Time.millisToPosix 0)
                                     |> Pool.playerShot [ Pool.cueHitBall (Time.millisToPosix 1) Pool.oneBall ]
                                     |> andKeepShooting [ Pool.cueStruck (Time.millisToPosix 2) ]
-                                    |> andKeepShooting [ Pool.cueHitBall (Time.millisToPosix 3) Pool.oneBall ]
-                                    |> andKeepShooting [ Pool.cueHitBall (Time.millisToPosix 5) Pool.oneBall ]
+                                    |> andKeepShooting [ Pool.cueHitBall (Time.millisToPosix 3) Pool.twoBall ]
+                                    |> andKeepShooting [ Pool.cueHitBall (Time.millisToPosix 5) Pool.threeBall ]
                         in
                         case nextAction of
                             Pool.GameOver pool ->
