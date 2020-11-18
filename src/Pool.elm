@@ -63,10 +63,6 @@ type alias PoolData =
     }
 
 
-
--- type Status =
-
-
 type alias EventData =
     { when : Time.Posix
     , event : InternalEvent
@@ -74,14 +70,36 @@ type alias EventData =
 
 
 
--- type EventType
---     = EventAction Action
---     | EventRuling Ruling
+-- Player
 
 
-type Ruling
-    = Foul -- FoulType
-    | Win
+type Player
+    = Player1
+    | Player2
+
+
+playerToInt : Player -> Int
+playerToInt player =
+    case player of
+        Player1 ->
+            0
+
+        Player2 ->
+            1
+
+
+switchPlayer : Player -> Player
+switchPlayer player =
+    case player of
+        Player1 ->
+            Player2
+
+        Player2 ->
+            Player1
+
+
+
+-- Ball
 
 
 type Ball
@@ -177,10 +195,6 @@ fifteenBall =
     FifteenBall
 
 
-type Cue
-    = Cue
-
-
 
 -- Init
 
@@ -198,31 +212,6 @@ start =
 
 
 -- View
-
-
-type Player
-    = Player1
-    | Player2
-
-
-playerToInt : Player -> Int
-playerToInt player =
-    case player of
-        Player1 ->
-            0
-
-        Player2 ->
-            1
-
-
-switchPlayer : Player -> Player
-switchPlayer player =
-    case player of
-        Player1 ->
-            Player2
-
-        Player2 ->
-            Player1
 
 
 {-| Show the current player, if there is one.
@@ -267,11 +256,6 @@ type AwaitingNextShot
     = AwaitingNextShot
 
 
-
--- type AwaitingCollisions
---     = AwaitingCollisions
-
-
 type AwaitingBallInHand
     = AwaitingBallInHand
 
@@ -282,11 +266,6 @@ type AwaitingBallInKitchen
 
 type AwaitingNewGame
     = AwaitingNewGame
-
-
-
--- type Action state
---     = Action
 
 
 rack : Time.Posix -> Pool AwaitingRack -> Pool AwaitingBallInKitchen
@@ -337,15 +316,6 @@ type Event
     = Event EventData
 
 
-type
-    WhatHappened
-    -- = PlayersFault (Pool AwaitingBallInHand)
-    = NextShot (Pool AwaitingNextShot)
-      -- | NextTurn (Pool AwaitingNextTurn)
-    | GameOver (Pool AwaitingNewGame) { winner : Int }
-    | Error String
-
-
 cueHitBall : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
 cueHitBall when ball =
     ( when
@@ -373,6 +343,19 @@ ballTouchedTheWall =
 ballFellInPocket : Time.Posix -> ( Time.Posix, ShotEvent )
 ballFellInPocket =
     Debug.todo ""
+
+
+
+-- Ruling
+
+
+type
+    WhatHappened
+    -- = PlayersFault (Pool AwaitingBallInHand)
+    = NextShot (Pool AwaitingNextShot)
+      -- | NextTurn (Pool AwaitingNextTurn)
+    | GameOver (Pool AwaitingNewGame) { winner : Int }
+    | Error String
 
 
 playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingNextShot -> WhatHappened
