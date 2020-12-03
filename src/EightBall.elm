@@ -5,7 +5,7 @@ module EightBall exposing
     , rack, ballPlacedBehindHeadString, playerShot
     , ShotEvent
     , cueHitBall, cueStruck, ballFellInPocket
-    , oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
+    , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
     , WhatHappened(..)
     )
 
@@ -46,7 +46,7 @@ module EightBall exposing
 
 ## Balls
 
-@docs oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
+@docs Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
 
 
 ## Ruling
@@ -124,96 +124,107 @@ switchPlayer player =
 
 
 type Ball
-    = OneBall
-    | TwoBall
-    | ThreeBall
-    | FourBall
-    | FiveBall
-    | SixBall
-    | SevenBall
-    | EightBall
-    | NineBall
-    | TenBall
-    | ElevenBall
-    | TwelveBall
-    | ThirteenBall
-    | FourteenBall
-    | FifteenBall
+    = Ball Int BallGroup
 
 
 oneBall : Ball
 oneBall =
-    OneBall
+    Ball 1 SolidGroup
 
 
 twoBall : Ball
 twoBall =
-    TwoBall
+    Ball 2 SolidGroup
 
 
 threeBall : Ball
 threeBall =
-    ThreeBall
+    Ball 3 SolidGroup
 
 
 fourBall : Ball
 fourBall =
-    FourBall
+    Ball 4 SolidGroup
 
 
 fiveBall : Ball
 fiveBall =
-    FiveBall
+    Ball 5 SolidGroup
 
 
 sixBall : Ball
 sixBall =
-    SixBall
+    Ball 6 SolidGroup
 
 
 sevenBall : Ball
 sevenBall =
-    SevenBall
+    Ball 7 SolidGroup
 
 
 eightBall : Ball
 eightBall =
-    EightBall
+    Ball 8 EightGroup
 
 
 nineBall : Ball
 nineBall =
-    NineBall
+    Ball 9 StripeGroup
 
 
 tenBall : Ball
 tenBall =
-    TenBall
+    Ball 10 StripeGroup
 
 
 elevenBall : Ball
 elevenBall =
-    ElevenBall
+    Ball 11 StripeGroup
 
 
 twelveBall : Ball
 twelveBall =
-    TwelveBall
+    Ball 12 StripeGroup
 
 
 thirteenBall : Ball
 thirteenBall =
-    ThirteenBall
+    Ball 13 StripeGroup
 
 
 fourteenBall : Ball
 fourteenBall =
-    FourteenBall
+    Ball 14 StripeGroup
 
 
 fifteenBall : Ball
 fifteenBall =
-    FifteenBall
+    Ball 15 StripeGroup
+
+
+{-| Create a ball with a given number. Returns `Nothing` for numbers outside of [1, 15].
+
+    numberedBall 13 == Just thirteenBall
+
+    numberedBall 66 == Nothing
+
+-}
+numberedBall : Int -> Maybe Ball
+numberedBall number =
+    if number <= 0 then
+        Nothing
+
+    else if number <= 7 then
+        Just (Ball number SolidGroup)
+
+    else if number == 8 then
+        Just (Ball 8 EightGroup)
+
+    else if number <= 15 then
+        Just (Ball number StripeGroup)
+
+    else
+        Nothing
 
 
 
@@ -510,52 +521,8 @@ type BallGroup
 
 
 ballGroup : Ball -> BallGroup
-ballGroup ball =
-    case ball of
-        OneBall ->
-            SolidGroup
-
-        TwoBall ->
-            SolidGroup
-
-        ThreeBall ->
-            SolidGroup
-
-        FourBall ->
-            SolidGroup
-
-        FiveBall ->
-            SolidGroup
-
-        SixBall ->
-            SolidGroup
-
-        SevenBall ->
-            SolidGroup
-
-        EightBall ->
-            EightGroup
-
-        NineBall ->
-            StripeGroup
-
-        TenBall ->
-            StripeGroup
-
-        ElevenBall ->
-            StripeGroup
-
-        TwelveBall ->
-            StripeGroup
-
-        ThirteenBall ->
-            StripeGroup
-
-        FourteenBall ->
-            StripeGroup
-
-        FifteenBall ->
-            StripeGroup
+ballGroup (Ball number group) =
+    group
 
 
 ballPocketedInGroup : BallGroup -> ( Time.Posix, ShotEvent ) -> Bool
