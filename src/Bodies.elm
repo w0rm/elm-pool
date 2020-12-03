@@ -1,4 +1,4 @@
-module Bodies exposing (Ball(..), Data, Id(..), balls, cueBall, floor, tableSurface, tableWalls)
+module Bodies exposing (Data, Id(..), balls, cueBall, floor, tableSurface, tableWalls)
 
 import Angle
 import Axis3d
@@ -13,6 +13,7 @@ import Physics.Coordinates exposing (BodyCoordinates)
 import Physics.Material exposing (Material)
 import Physics.Shape
 import Point3d
+import Pool exposing (Ball)
 import Quantity exposing (Quantity(..))
 import Scene3d exposing (Entity)
 import Scene3d.Material as Material
@@ -20,14 +21,10 @@ import Sphere3d exposing (Sphere3d)
 import Vector3d
 
 
-type Ball
-    = Numbered Int -- 1-15
-    | Cue
-
-
 type Id
     = Floor
-    | Ball Ball
+    | Numbered Ball
+    | CueBall
     | Table
     | Walls
 
@@ -91,7 +88,10 @@ balls maybeRoughnessTexture ballTextures =
                                 }
                     in
                     Body.sphere ballSphere
-                        { id = Ball (Numbered number)
+                        { id =
+                            Pool.numberedBall number
+                                |> Maybe.map Numbered
+                                |> Maybe.withDefault CueBall
                         , entity =
                             Scene3d.sphereWithShadow
                                 material
@@ -116,7 +116,7 @@ balls maybeRoughnessTexture ballTextures =
 cueBall : Body Data
 cueBall =
     Body.sphere ballSphere
-        { id = Ball Cue
+        { id = CueBall
         , entity =
             Scene3d.sphereWithShadow
                 (Material.matte (Color.rgb255 255 255 255))

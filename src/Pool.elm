@@ -3,7 +3,7 @@ module Pool exposing
     , currentPlayer, currentScore
     , rack, ballPlacedInKitchen, playerShot
     , cueHitBall, cueStruck
-    , oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
+    , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
     , WhatHappened(..)
     , ShotEvent
     )
@@ -33,7 +33,7 @@ module Pool exposing
 
 ## Balls
 
-@docs oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall
+@docs Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
 
 
 ## Ruling
@@ -103,96 +103,98 @@ switchPlayer player =
 
 
 type Ball
-    = OneBall
-    | TwoBall
-    | ThreeBall
-    | FourBall
-    | FiveBall
-    | SixBall
-    | SevenBall
-    | EightBall
-    | NineBall
-    | TenBall
-    | ElevenBall
-    | TwelveBall
-    | ThirteenBall
-    | FourteenBall
-    | FifteenBall
+    = Ball Int
 
 
 oneBall : Ball
 oneBall =
-    OneBall
+    Ball 1
 
 
 twoBall : Ball
 twoBall =
-    TwoBall
+    Ball 2
 
 
 threeBall : Ball
 threeBall =
-    ThreeBall
+    Ball 3
 
 
 fourBall : Ball
 fourBall =
-    FourBall
+    Ball 4
 
 
 fiveBall : Ball
 fiveBall =
-    FiveBall
+    Ball 5
 
 
 sixBall : Ball
 sixBall =
-    SixBall
+    Ball 6
 
 
 sevenBall : Ball
 sevenBall =
-    SevenBall
+    Ball 7
 
 
 eightBall : Ball
 eightBall =
-    EightBall
+    Ball 8
 
 
 nineBall : Ball
 nineBall =
-    NineBall
+    Ball 9
 
 
 tenBall : Ball
 tenBall =
-    TenBall
+    Ball 10
 
 
 elevenBall : Ball
 elevenBall =
-    ElevenBall
+    Ball 11
 
 
 twelveBall : Ball
 twelveBall =
-    TwelveBall
+    Ball 12
 
 
 thirteenBall : Ball
 thirteenBall =
-    ThirteenBall
+    Ball 13
 
 
 fourteenBall : Ball
 fourteenBall =
-    FourteenBall
+    Ball 14
 
 
 fifteenBall : Ball
 fifteenBall =
-    FifteenBall
+    Ball 15
+
+
+{-| Create a ball with a given number. Returns `Nothing` for numbers outside of [1, 15].
+
+    numberedBall 13 == Just thirteenBall
+
+    numberedBall 66 == Nothing
+
+-}
+numberedBall : Int -> Maybe Ball
+numberedBall number =
+    if number >= 1 && number <= 15 then
+        Just (Ball number)
+
+    else
+        Nothing
 
 
 

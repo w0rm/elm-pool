@@ -3,7 +3,7 @@ module Main exposing (main)
 import Acceleration
 import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
-import Bodies exposing (Ball(..), Data, Id(..))
+import Bodies exposing (Data, Id(..))
 import Browser
 import Browser.Dom
 import Browser.Events
@@ -193,7 +193,7 @@ camera distance azimuth elevation mouseAction world =
 cuePosition : World Data -> Point3d Meters WorldCoordinates
 cuePosition world =
     World.bodies world
-        |> List.filter (\b -> (Body.data b).id == Ball Cue)
+        |> List.filter (\b -> (Body.data b).id == CueBall)
         |> List.head
         |> Maybe.map (\b -> Point3d.placeIn (Body.frame b) (Body.centerOfMass b))
         |> Maybe.withDefault Point3d.origin
@@ -377,7 +377,12 @@ ballsStoppedMoving world =
     List.all
         (\body ->
             case (Body.data body).id of
-                Ball _ ->
+                CueBall ->
+                    Body.velocity body
+                        |> Vector3d.length
+                        |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
+
+                Numbered _ ->
                     Body.velocity body
                         |> Vector3d.length
                         |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
@@ -439,7 +444,7 @@ update msg model =
                     case World.raycast (ray model mouse) model.world of
                         Just raycastResult ->
                             case (Body.data raycastResult.body).id of
-                                Ball Cue ->
+                                CueBall ->
                                     { model
                                         | mouseAction =
                                             Aiming
@@ -472,7 +477,7 @@ update msg model =
                         case World.raycast (ray model mouse) model.world of
                             Just raycastResult ->
                                 case (Body.data raycastResult.body).id of
-                                    Ball Cue ->
+                                    CueBall ->
                                         { model
                                             | mouseAction =
                                                 HoveringCue
@@ -519,7 +524,7 @@ update msg model =
                         , world =
                             World.update
                                 (\b ->
-                                    if (Body.data b).id == Ball Cue then
+                                    if (Body.data b).id == CueBall then
                                         let
                                             axis =
                                                 axisFromMouseAction mouseAction
