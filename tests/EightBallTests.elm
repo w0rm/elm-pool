@@ -35,6 +35,75 @@ suite =
                                     "Should be EightBall.NextShot, but found this instead:\n"
                                         ++ Debug.toString other
                     )
+                , test "a ball is pocketed and target balls are decided, score is 1-0"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> EightBall.currentScore
+                                    |> Expect.equal
+                                        { player1 = 1
+                                        , player2 = 0
+                                        }
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "several balls are pocketed, score is 3-5"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.twoBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.threeBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.fiveBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueStruck (Time.millisToPosix 1)
+                                        ]
+                                    -- Player 2 starts shooting
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.nineBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.nineBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.tenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.elevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.twelveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.thirteenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> EightBall.currentScore
+                                    |> Expect.equal
+                                        { player1 = 3
+                                        , player2 = 5
+                                        }
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
                 ]
             ]
         , describe "update"

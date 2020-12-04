@@ -73,7 +73,6 @@ type Pool state
 type alias PoolData =
     { events : List EventData
     , player : Player
-    , ballsHitConsecutively : Int
     , pocketed : List ( Ball, Player ) -- Ideally this would be a Dictionary, but it would require a bit more work to generate a comparable for each ball.
     , target : TargetBalls
     }
@@ -88,6 +87,16 @@ type alias EventData =
 type TargetBalls
     = Open -- Any ball except the eight ball may be struck.
     | Grouped { solids : Player }
+
+
+pocketedIn : BallGroup -> List ( Ball, Player ) -> Int
+pocketedIn group pocketedBalls =
+    pocketedBalls
+        |> List.filter
+            (\( Ball number pocketedBallGroup, player ) ->
+                pocketedBallGroup == group
+            )
+        |> List.length
 
 
 
@@ -238,7 +247,6 @@ start =
     Pool
         { events = []
         , player = Player1
-        , ballsHitConsecutively = 0
         , pocketed = []
         , target = Open
         }
@@ -265,17 +273,24 @@ currentPlayer (Pool ({ player } as poolData)) =
 {-| Get the current score.
 -}
 currentScore : Pool state -> { player1 : Int, player2 : Int }
-currentScore (Pool ({ ballsHitConsecutively, player } as poolData)) =
-    case player of
-        Player1 ->
-            { player1 = ballsHitConsecutively
+currentScore (Pool ({ player, pocketed, target } as poolData)) =
+    case target of
+        Open ->
+            { player1 = 0
             , player2 = 0
             }
 
-        Player2 ->
-            { player1 = 0
-            , player2 = ballsHitConsecutively
-            }
+        Grouped { solids } ->
+            case solids of
+                Player1 ->
+                    { player1 = pocketedIn SolidGroup pocketed
+                    , player2 = pocketedIn StripeGroup pocketed
+                    }
+
+                Player2 ->
+                    { player1 = pocketedIn StripeGroup pocketed
+                    , player2 = pocketedIn SolidGroup pocketed
+                    }
 
 
 type CurrentTarget
@@ -549,7 +564,7 @@ checkShot : List ( Time.Posix, ShotEvent ) -> PoolData -> WhatHappened
 checkShot shotEvents poolData =
     case shotEvents of
         [] ->
-            if poolData.ballsHitConsecutively >= 2 then
+            if False then
                 GameOver
                     (Pool poolData)
                     { winner = playerToInt poolData.player
@@ -564,7 +579,6 @@ checkShot shotEvents poolData =
                 newPoolData =
                     { poolData
                         | player = switchPlayer poolData.player
-                        , ballsHitConsecutively = 0
                     }
             in
             -- TODO: Check CueStruck in otherShots (should only exist once per shot).
@@ -574,9 +588,7 @@ checkShot shotEvents poolData =
             -- TODO (8ball): Check if ball is player's object ball.
             let
                 newPoolData =
-                    { poolData
-                        | ballsHitConsecutively = poolData.ballsHitConsecutively + 1
-                    }
+                    poolData
             in
             checkShot otherShots newPoolData
 
