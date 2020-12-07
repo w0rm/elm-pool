@@ -4,8 +4,6 @@ import Acceleration
 import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
 import Bodies exposing (Data, Id(..))
-import Browser
-import Browser.Dom
 import Browser.Events
 import Camera3d exposing (Camera3d)
 import Color exposing (Color)
@@ -20,7 +18,6 @@ import Html.Events
 import Illuminance
 import Json.Decode
 import Length exposing (Length, Meters)
-import Luminance
 import Physics.Body as Body
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
@@ -34,11 +31,9 @@ import Scene3d.Light
 import Scene3d.Material as Material
 import SketchPlane3d
 import Speed
-import Task
 import Vector2d
 import Vector3d
 import Viewpoint3d
-import WebGL.Texture as Texture exposing (defaultOptions)
 
 
 type ScreenCoordinates
@@ -80,9 +75,9 @@ type State
 
 
 type Msg
-    = AnimationFrame
+    = Tick
     | Resize Int Int
-    | Zoom Float
+    | MouseWheel Float
     | MouseDown (Point2d Pixels ScreenCoordinates)
     | MouseUp
     | MouseMove (Point2d Pixels ScreenCoordinates)
@@ -227,9 +222,9 @@ view { world, dimensions, distance, azimuth, elevation, mouseAction } =
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" "0"
         , Html.Attributes.style "top" "0"
-        , Html.Events.preventDefaultOn "mousewheel"
+        , Html.Events.preventDefaultOn "wheel"
             (Json.Decode.map
-                (\deltaY -> ( Zoom deltaY, True ))
+                (\deltaY -> ( MouseWheel deltaY, True ))
                 (Json.Decode.field "deltaY" Json.Decode.float)
             )
         ]
@@ -323,7 +318,7 @@ subscriptions model =
     Sub.batch
         [ Browser.Events.onResize Resize
         , if model.state == Simulating then
-            Browser.Events.onAnimationFrame (\_ -> AnimationFrame)
+            Browser.Events.onAnimationFrame (\_ -> Tick)
 
           else
             Sub.none
@@ -357,7 +352,7 @@ ballsStoppedMoving world =
 update : Msg -> Model -> Model
 update msg model =
     case msg of
-        AnimationFrame ->
+        Tick ->
             case model.state of
                 Simulating ->
                     if ballsStoppedMoving model.world then
@@ -378,7 +373,7 @@ update msg model =
         Resize width height ->
             { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
 
-        Zoom deltaY ->
+        MouseWheel deltaY ->
             { model
                 | distance =
                     model.distance
