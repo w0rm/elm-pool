@@ -47,8 +47,8 @@ ballSphere =
         (millimeters radius)
 
 
-balls : Maybe (Material.Texture Float) -> Dict Int (Material.Texture Color) -> Maybe (List (Body Data))
-balls maybeRoughnessTexture ballTextures =
+balls : Material.Texture Float -> Dict Int (Material.Texture Color) -> List (Body Data)
+balls roughnessTexture ballTextures =
     let
         numbers =
             [ 1, 10, 4, 2, 8, 5, 9, 3, 14, 15, 11, 12, 6, 13, 7 ]
@@ -56,61 +56,55 @@ balls maybeRoughnessTexture ballTextures =
         lastRow =
             sqrt (2 * toFloat (List.length numbers)) - 1
     in
-    case ( maybeRoughnessTexture, Dict.size ballTextures ) of
-        ( Just roughnessTexture, 15 ) ->
-            List.indexedMap
-                (\index number ->
-                    let
-                        row =
-                            round (sqrt (2 * (toFloat index + 1))) - 1
+    List.indexedMap
+        (\index number ->
+            let
+                row =
+                    round (sqrt (2 * (toFloat index + 1))) - 1
 
-                        rowStartIndex =
-                            row * (row + 1) // 2
+                rowStartIndex =
+                    row * (row + 1) // 2
 
-                        distance =
-                            radius * sqrt 3
+                distance =
+                    radius * sqrt 3
 
-                        x =
-                            (toFloat index - toFloat rowStartIndex - toFloat row / 2) * radius * 2
+                x =
+                    (toFloat index - toFloat rowStartIndex - toFloat row / 2) * radius * 2
 
-                        y =
-                            (toFloat row - lastRow / 2) * distance
+                y =
+                    (toFloat row - lastRow / 2) * distance
 
-                        colorTexture =
-                            Dict.get number ballTextures
-                                |> Maybe.withDefault (Material.constant (Color.rgb255 0 0 0))
+                colorTexture =
+                    Dict.get number ballTextures
+                        |> Maybe.withDefault (Material.constant (Color.rgb255 0 0 0))
 
-                        material =
-                            Material.texturedPbr
-                                { baseColor = colorTexture
-                                , roughness = roughnessTexture
-                                , metallic = Material.constant 0
-                                }
-                    in
-                    Body.sphere ballSphere
-                        { id =
-                            Pool.numberedBall number
-                                |> Maybe.map Numbered
-                                |> Maybe.withDefault CueBall
-                        , entity =
-                            Scene3d.sphereWithShadow
-                                material
-                                ballSphere
-                                -- rotate to see the numbers
-                                |> Scene3d.rotateAround
-                                    (Axis3d.through (Sphere3d.centerPoint ballSphere) Direction3d.x)
-                                    (Angle.degrees 90)
+                material =
+                    Material.texturedPbr
+                        { baseColor = colorTexture
+                        , roughness = roughnessTexture
+                        , metallic = Material.constant 0
                         }
-                        |> Body.withMaterial ballMaterial
-                        |> Body.withDamping ballDamping
-                        |> Body.withBehavior (Body.dynamic (Mass.grams 170))
-                        |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) 0)
-                )
-                numbers
-                |> Just
-
-        _ ->
-            Nothing
+            in
+            Body.sphere ballSphere
+                { id =
+                    Pool.numberedBall number
+                        |> Maybe.map Numbered
+                        |> Maybe.withDefault CueBall
+                , entity =
+                    Scene3d.sphereWithShadow
+                        material
+                        ballSphere
+                        -- rotate to see the numbers
+                        |> Scene3d.rotateAround
+                            (Axis3d.through (Sphere3d.centerPoint ballSphere) Direction3d.x)
+                            (Angle.degrees 90)
+                }
+                |> Body.withMaterial ballMaterial
+                |> Body.withDamping ballDamping
+                |> Body.withBehavior (Body.dynamic (Mass.grams 170))
+                |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) 0)
+        )
+        numbers
 
 
 cueBall : Body Data
