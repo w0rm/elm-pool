@@ -6,19 +6,19 @@ Physically simulated pool game. Work in progress.
 
 * Common controls
 
-  1. Click and drag anywhere to rotate the camera around the focal point
-  2. Zoom into the focal point with the mousewheel
+  1. Click and drag anywhere to rotate the camera around the focus point
+  2. Zoom into the focus point with the mousewheel
 
 * Placing the cue ball behind the head string
 
-  1. The focal point is at the center of the area behind the head string
+  1. The focus point is at the center of the area behind the head string
   2. Hover over the table to choose where to place the cue ball
   3. The cue ball is rendered in red when it overlaps with other objects
   4. Click to place the cue ball if it is not overlapping with other objects
 
 * Aiming and shooting
 
-  1. The focal point depends on the zoom level (center of the table <-> cue ball)
+  1. The focus point depends on the zoom level (center of the table <-> cue ball)
   2. The camera angle defines the azimuth of the cue
   3. Click and hold on the cue ball to set the hit point, move cursor while pressed to set cue elevation
   4. The cue is rendered in red if it overlaps with other objects
@@ -28,5 +28,5 @@ Physically simulated pool game. Work in progress.
 
 * Simulating
 
-  1. The focal point is at the center of the table
+  1. The focus point is at the center of the table
   2. The camera is zoomed out to show the table (unless interrupted with the mousewheel)
