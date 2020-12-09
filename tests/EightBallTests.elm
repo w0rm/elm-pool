@@ -243,6 +243,30 @@ suite =
                                     "Should be EightBall.NextShot, but found this instead:\n"
                                         ++ Debug.toString other
                     )
+                , test "after player shoots cue and pockets a ball but also scratches, table is still open"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.scratch (Time.millisToPosix 1)
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> EightBall.currentTarget
+                                    |> Expect.equal EightBall.OpenTable
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
                 ]
             ]
         ]

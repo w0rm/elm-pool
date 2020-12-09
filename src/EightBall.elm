@@ -4,7 +4,7 @@ module EightBall exposing
     , currentPlayer, currentScore, currentTarget
     , rack, ballPlacedBehindHeadString, playerShot
     , ShotEvent
-    , cueHitBall, cueStruck, ballFellInPocket
+    , cueHitBall, cueStruck, ballFellInPocket, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
     , WhatHappened(..)
     )
@@ -41,7 +41,7 @@ module EightBall exposing
 ## Events
 
 @docs ShotEvent
-@docs cueHitBall, cueStruck, ballFellInPocket
+@docs cueHitBall, cueStruck, ballFellInPocket, scratch
 
 
 ## Balls
@@ -376,6 +376,7 @@ type ShotEvent
       --       -- | BallToWall Ball Wall
     | BallToPocket Ball --Pocket
     | CueHitBall Ball
+    | Scratch
 
 
 ballPlacedBehindHeadString : Time.Posix -> Pool AwaitingPlaceBallBehindHeadstring -> Pool AwaitingNextShot
@@ -423,6 +424,18 @@ ballFellInPocket : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
 ballFellInPocket when ball =
     ( when
     , BallToPocket ball
+    )
+
+
+{-| When the cue ball is pocketed.
+
+[WPA Rules 8.6](https://wpapool.com/rules-of-play/#86Scratch)
+
+-}
+scratch : Time.Posix -> ( Time.Posix, ShotEvent )
+scratch when =
+    ( when
+    , Scratch
     )
 
 
@@ -490,6 +503,9 @@ checkNextTarget shotEvents poolData =
 
                         CueHitBall ball ->
                             False
+
+                        Scratch ->
+                            True
                 )
                 shotEvents
 
@@ -552,6 +568,9 @@ ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
         CueHitBall ball ->
             False
 
+        Scratch ->
+            False
+
 
 {-| At the beginning of the shot...
 -}
@@ -602,5 +621,12 @@ checkShot shotEvents poolData =
                                 ++ [ ( ball, poolData.player )
                                    ]
                     }
+            in
+            checkShot otherShots newPoolData
+
+        ( _, Scratch ) :: otherShots ->
+            let
+                newPoolData =
+                    poolData
             in
             checkShot otherShots newPoolData
