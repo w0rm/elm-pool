@@ -74,20 +74,18 @@ suite =
                                         ]
                                     |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.twoBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.threeBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.fiveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 2) EightBall.threeBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.fiveBall
                                         ]
-                                    |> andKeepShooting
-                                        [ EightBall.cueStruck (Time.millisToPosix 1)
-                                        ]
+                                    |> andKeepShooting []
                                     -- Player 2 starts shooting
                                     |> andKeepShooting
-                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.nineBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.nineBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.tenBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.elevenBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.twelveBall
-                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.thirteenBall
+                                        [ EightBall.cueHitBall (Time.millisToPosix 5) EightBall.nineBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 5) EightBall.nineBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 5) EightBall.tenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 5) EightBall.elevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 5) EightBall.twelveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 5) EightBall.thirteenBall
                                         ]
                         in
                         case nextAction of
@@ -108,7 +106,7 @@ suite =
             ]
         , describe "update"
             [ describe "playerShot"
-                [ test "no events sent, still current player's turn"
+                [ test "after player shoots cue hits nothing, next players turn"
                     (\_ ->
                         let
                             nextAction =
@@ -116,28 +114,6 @@ suite =
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
                                     |> EightBall.playerShot []
-                        in
-                        case nextAction of
-                            EightBall.NextShot pool ->
-                                pool
-                                    |> EightBall.currentPlayer
-                                    |> Expect.equal 0
-
-                            other ->
-                                Expect.fail <|
-                                    "Should be EightBall.NextShot, but found this instead:\n"
-                                        ++ Debug.toString other
-                    )
-                , test "after player shoots cue hits nothing, next players turn"
-                    (\_ ->
-                        let
-                            nextAction =
-                                EightBall.start
-                                    |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
-                                        [ EightBall.cueStruck (Time.millisToPosix 0)
-                                        ]
                         in
                         case nextAction of
                             EightBall.NextShot pool ->
@@ -157,8 +133,8 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
-                                    |> EightBall.playerShot [ EightBall.cueStruck (Time.millisToPosix 0) ]
-                                    |> andKeepShooting [ EightBall.cueStruck (Time.millisToPosix 1) ]
+                                    |> EightBall.playerShot []
+                                    |> andKeepShooting []
                         in
                         case nextAction of
                             EightBall.NextShot pool ->

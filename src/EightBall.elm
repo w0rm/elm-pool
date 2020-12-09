@@ -4,7 +4,7 @@ module EightBall exposing
     , currentPlayer, currentScore, currentTarget
     , rack, ballPlacedBehindHeadString, playerShot
     , ShotEvent
-    , cueHitBall, cueStruck, ballFellInPocket, scratch
+    , cueHitBall, ballFellInPocket, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
     , WhatHappened(..)
     )
@@ -41,7 +41,7 @@ module EightBall exposing
 ## Events
 
 @docs ShotEvent
-@docs cueHitBall, cueStruck, ballFellInPocket, scratch
+@docs cueHitBall, ballFellInPocket, scratch
 
 
 ## Balls
@@ -370,11 +370,11 @@ type InternalEvent
 
 
 type ShotEvent
-    = CueStruck
+    = -- CueStruck -- Without a CueStruck event, it's not possible to "replay" events.
       --       -- | BallOffTable Ball
       --       -- | BallToBall Ball Ball (List Ball)
       --       -- | BallToWall Ball Wall
-    | BallToPocket Ball --Pocket
+      BallToPocket Ball --Pocket
     | CueHitBall Ball
     | Scratch
 
@@ -400,13 +400,6 @@ cueHitBall : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
 cueHitBall when ball =
     ( when
     , CueHitBall ball
-    )
-
-
-cueStruck : Time.Posix -> ( Time.Posix, ShotEvent )
-cueStruck when =
-    ( when
-    , CueStruck
     )
 
 
@@ -452,11 +445,30 @@ type
     | Error String
 
 
+{-| Send a series of shot events.
+
+Note: if no balls are hit by the cue ball, send an empty list.
+
+    playerShot [] pool -- Cue struck, but no other balls hit.
+
+-}
 playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingNextShot -> WhatHappened
 playerShot shotEvents (Pool data) =
     case shotEvents of
         [] ->
-            NextShot <| Pool data
+            -- Assume the cue is struck, but no other balls are hit.
+            NextShot <|
+                Pool
+                    { data
+                        | player = switchPlayer data.player
+                        , events =
+                            data.events
+                                ++ [ { event = Shot []
+                                     , when = lastEventTime data.events
+                                     }
+                                   ]
+                                |> List.sortWith eventTimeComparison
+                    }
 
         ( firstShotTime, firstShotEvent ) :: otherShotEvents ->
             let
@@ -488,6 +500,15 @@ eventTimeComparison eventData1 eventData2 =
         (Time.toMillis Time.utc eventData2.when)
 
 
+{-| TODO: May need to check for equal times and put things like CueHitBall before BallToPocket.
+-}
+shotEventTimeComparison : ( Time.Posix, ShotEvent ) -> ( Time.Posix, ShotEvent ) -> Order
+shotEventTimeComparison ( time1, _ ) ( time2, _ ) =
+    compare
+        (Time.toMillis Time.utc time1)
+        (Time.toMillis Time.utc time2)
+
+
 checkNextTarget : List ( Time.Posix, ShotEvent ) -> PoolData -> TargetBalls
 checkNextTarget shotEvents poolData =
     let
@@ -495,9 +516,6 @@ checkNextTarget shotEvents poolData =
             List.filter
                 (\( shotTime, shotEvent ) ->
                     case shotEvent of
-                        CueStruck ->
-                            False
-
                         BallToPocket ball ->
                             True
 
@@ -559,9 +577,6 @@ ballGroup (Ball number group) =
 ballPocketedInGroup : BallGroup -> ( Time.Posix, ShotEvent ) -> Bool
 ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
     case shotEvent of
-        CueStruck ->
-            False
-
         BallToPocket ball ->
             ballGroup ball == ballGroup_
 
@@ -593,16 +608,6 @@ checkShot shotEvents poolData =
                 NextShot <|
                     Pool poolData
 
-        ( _, CueStruck ) :: otherShots ->
-            let
-                newPoolData =
-                    { poolData
-                        | player = switchPlayer poolData.player
-                    }
-            in
-            -- TODO: Check CueStruck in otherShots (should only exist once per shot).
-            checkShot otherShots newPoolData
-
         ( _, CueHitBall ball ) :: otherShots ->
             -- TODO (8ball): Check if ball is player's object ball.
             let
@@ -630,3 +635,50 @@ checkShot shotEvents poolData =
                     poolData
             in
             checkShot otherShots newPoolData
+
+
+{-| When a player shoots, but sends no events, we still want to log the event, so we try to find the last event time. If there is none, default to `Time.millisToPosix 0`.
+-}
+lastEventTime : List EventData -> Time.Posix
+lastEventTime events =
+    let
+        maybeLastEventTime =
+            events
+                |> List.sortWith eventTimeComparison
+                |> List.reverse
+                |> List.head
+                |> Maybe.andThen lastEventTimeByEventType
+    in
+    case maybeLastEventTime of
+        Nothing ->
+            Time.millisToPosix 0
+
+        Just time ->
+            time
+
+
+lastEventTimeByEventType : EventData -> Maybe Time.Posix
+lastEventTimeByEventType eventData =
+    case eventData.event of
+        Shot shotEvents ->
+            lastShotEventTime shotEvents
+
+        Racked ->
+            Just eventData.when
+
+        BallPlacedBehindHeadString ->
+            Just eventData.when
+
+
+lastShotEventTime : List ( Time.Posix, ShotEvent ) -> Maybe Time.Posix
+lastShotEventTime shotEvents =
+    case
+        shotEvents
+            |> List.sortWith shotEventTimeComparison
+            |> List.reverse
+    of
+        [] ->
+            Nothing
+
+        ( firstShotTime, firstShotEvent ) :: otherShotEvents ->
+            Just firstShotTime
