@@ -16,6 +16,7 @@ import Block3d
 import Color exposing (Color)
 import Dict exposing (Dict)
 import Direction3d
+import EightBall exposing (Ball)
 import Length exposing (Meters, meters, millimeters)
 import Mass
 import Physics.Body as Body exposing (Body)
@@ -24,13 +25,12 @@ import Physics.Material exposing (Material)
 import Physics.Shape
 import Point2d
 import Point3d
-import Pool exposing (Ball)
 import Quantity exposing (Quantity(..))
 import Rectangle2d
 import Rectangle3d exposing (Rectangle3d)
 import Scene3d exposing (Entity)
 import Scene3d.Material as Material
-import SketchPlane3d exposing (SketchPlane3d)
+import SketchPlane3d
 import Sphere3d exposing (Sphere3d)
 import Vector3d
 
@@ -137,7 +137,7 @@ balls roughnessTexture ballTextures =
             in
             Body.sphere ballSphere
                 { id =
-                    Pool.numberedBall number
+                    EightBall.numberedBall number
                         |> Maybe.map Numbered
                         |> Maybe.withDefault CueBall
                 , entity =
