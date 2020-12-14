@@ -11,7 +11,7 @@ import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
-import EightBall exposing (AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool)
+import EightBall exposing (AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Geometry
 import Html exposing (Html)
@@ -21,6 +21,7 @@ import Illuminance
 import Json.Decode
 import Length exposing (Length, Meters)
 import Physics.Body as Body
+import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
@@ -75,7 +76,7 @@ type ShootButtonState
 type State
     = PlacingBehindHeadString (Pool AwaitingPlaceBallBehindHeadstring)
     | Playing (Pool AwaitingNextShot)
-    | Simulating (Pool AwaitingNextShot)
+    | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingNextShot)
 
 
 type Msg
@@ -346,10 +347,22 @@ update msg model =
                                     Released
                     }
 
-                Simulating pool ->
+                Simulating events pool ->
                     if ballsStoppedMoving newModel.world then
                         { newModel
-                            | state = Playing pool
+                            | state =
+                                case EightBall.playerShot (List.reverse events) pool of
+                                    PlayersFault _ ->
+                                        Debug.todo "AwaitingBallInHand"
+
+                                    NextShot newPool ->
+                                        Playing newPool
+
+                                    GameOver _ _ ->
+                                        Debug.todo "AwaitingNewGame"
+
+                                    Error _ ->
+                                        Debug.todo "Error"
                             , hitRelativeAzimuth = Angle.degrees 0
                             , hitElevation = Angle.degrees 0
                             , focalPoint = cuePosition newModel.world
@@ -357,12 +370,13 @@ update msg model =
                         }
 
                     else
+                        let
+                            ( newWorld, newEvents ) =
+                                simulateWithEvents 2 time newModel.world events
+                        in
                         { newModel
-                            | world =
-                                -- Simulate at shorter interval to prevent tunneling
-                                newModel.world
-                                    |> World.simulate (seconds (1 / 120))
-                                    |> World.simulate (seconds (1 / 120))
+                            | state = Simulating newEvents pool
+                            , world = newWorld
                         }
 
         Resize width height ->
@@ -440,7 +454,7 @@ update msg model =
                         Nothing ->
                             { model | mouseAction = Orbiting mouse }
 
-                Simulating _ ->
+                Simulating _ _ ->
                     { model | mouseAction = Orbiting mouse }
 
         MouseMove mouse ->
@@ -515,7 +529,7 @@ update msg model =
             case ( model.shootButtonState, model.state ) of
                 ( Pressed _, Playing pool ) ->
                     { model
-                        | state = Simulating pool
+                        | state = Simulating [] pool
                         , focalPoint = Point3d.origin
                         , world =
                             World.update
@@ -541,6 +555,59 @@ update msg model =
 
                 _ ->
                     model
+
+
+simulateWithEvents : Int -> Time.Posix -> World Data -> List ( Time.Posix, ShotEvent ) -> ( World Data, List ( Time.Posix, ShotEvent ) )
+simulateWithEvents frame time world events =
+    if frame > 0 then
+        let
+            newWorld =
+                -- Simulate at shorter interval to prevent tunneling
+                World.simulate (seconds (1 / 120)) world
+
+            newEvents =
+                List.foldl
+                    (\contact currentEvents ->
+                        let
+                            ( b1, b2 ) =
+                                Contact.bodies contact
+                        in
+                        case ( (Body.data b1).id, (Body.data b2).id ) of
+                            -- TODO: check collisions with pockets instead when we have them
+                            ( Numbered ball, Floor ) ->
+                                EightBall.ballFellInPocket time ball :: currentEvents
+
+                            ( Floor, Numbered ball ) ->
+                                EightBall.ballFellInPocket time ball :: currentEvents
+
+                            ( CueBall, Numbered ball ) ->
+                                EightBall.cueHitBall time ball :: currentEvents
+
+                            ( Numbered ball, CueBall ) ->
+                                EightBall.cueHitBall time ball :: currentEvents
+
+                            ( CueBall, Floor ) ->
+                                EightBall.scratch time :: currentEvents
+
+                            ( Floor, CueBall ) ->
+                                EightBall.scratch time :: currentEvents
+
+                            --(Numbered _, Numbered _) ->
+                            --    EightBall.twoBallsCollided time
+                            --( Walls, Numbered _ ) ->
+                            --    EightBall.ballTouchedTheWall time
+                            --( Numbered _, Walls ) ->
+                            --    EightBall.ballTouchedTheWall time
+                            _ ->
+                                currentEvents
+                    )
+                    events
+                    (World.contacts newWorld)
+        in
+        simulateWithEvents (frame - 1) time newWorld newEvents
+
+    else
+        ( world, events )
 
 
 decodeMouse : (Point2d Pixels ScreenCoordinates -> Msg) -> Json.Decode.Decoder Msg
