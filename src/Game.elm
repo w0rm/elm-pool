@@ -12,6 +12,7 @@ import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
 import Force
+import Geometry
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -69,7 +70,8 @@ type ShootButtonState
 
 
 type State
-    = Playing
+    = PlacingBehindHeadString
+    | Playing
     | Simulating
 
 
@@ -94,7 +96,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     { world = world
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
-    , focalPoint = cuePosition world
+    , focalPoint = Point3d.origin
     , cameraAzimuth = Angle.degrees -25
     , cameraElevation = Angle.degrees 30
     , cueElevation = Angle.degrees 5
@@ -102,7 +104,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     , hitElevation = Angle.degrees 0
     , mouseAction = Still
     , shootButtonState = Released
-    , state = Playing
+    , state = PlacingBehindHeadString
     }
 
 
@@ -176,17 +178,32 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
                 , intensityBelow = Illuminance.lux 0
                 }
 
-        entities =
-            World.bodies world
-                |> List.map
-                    (\body ->
-                        Scene3d.placeIn
-                            (Body.frame body)
-                            (Body.data body).entity
-                    )
-
-        entitiesWithCue =
+        bodies =
             case model.state of
+                PlacingBehindHeadString ->
+                    World.bodies world
+                        |> List.filter
+                            (\b ->
+                                (Body.data b).id /= CueBall
+                            )
+
+                _ ->
+                    World.bodies world
+
+        entities =
+            List.map
+                (\body ->
+                    Scene3d.placeIn
+                        (Body.frame body)
+                        (Body.data body).entity
+                )
+                bodies
+
+        entitiesWithUI =
+            case model.state of
+                PlacingBehindHeadString ->
+                    Bodies.areaBehindTheHeadStringEntity :: entities
+
                 Playing ->
                     cueEntity model :: entities
 
@@ -207,7 +224,7 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
             { dimensions = dimensionsInt
             , antialiasing = Scene3d.noAntialiasing
             , camera = camera distance cameraAzimuth cameraElevation focalPoint
-            , entities = entitiesWithCue
+            , entities = entitiesWithUI
             , lights = Scene3d.twoLights environmentalLighting sunlight
             , exposure = Scene3d.exposureValue 13
             , whiteBalance = Scene3d.Light.daylight
@@ -308,6 +325,20 @@ update msg model =
     case msg of
         Tick ->
             case model.state of
+                PlacingBehindHeadString ->
+                    model
+
+                Playing ->
+                    { model
+                        | shootButtonState =
+                            case model.shootButtonState of
+                                Pressed duration ->
+                                    Pressed (Quantity.plus duration (seconds (1 / 120)))
+
+                                Released ->
+                                    Released
+                    }
+
                 Simulating ->
                     if ballsStoppedMoving model.world then
                         { model
@@ -327,17 +358,6 @@ update msg model =
                                     |> World.simulate (seconds (1 / 120))
                         }
 
-                Playing ->
-                    { model
-                        | shootButtonState =
-                            case model.shootButtonState of
-                                Pressed duration ->
-                                    Pressed (Quantity.plus duration (seconds (1 / 120)))
-
-                                Released ->
-                                    Released
-                    }
-
         Resize width height ->
             { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
 
@@ -351,6 +371,27 @@ update msg model =
 
         MouseDown mouse ->
             case model.state of
+                PlacingBehindHeadString ->
+                    case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBehindTheHeadString of
+                        Just point ->
+                            { model
+                                | state = Playing
+                                , focalPoint = point
+                                , world =
+                                    World.update
+                                        (\b ->
+                                            if (Body.data b).id == CueBall then
+                                                Body.moveTo point b
+
+                                            else
+                                                b
+                                        )
+                                        model.world
+                            }
+
+                        Nothing ->
+                            { model | mouseAction = Orbiting mouse }
+
                 Playing ->
                     case World.raycast (ray model mouse) model.world of
                         Just raycastResult ->

@@ -1,4 +1,14 @@
-module Bodies exposing (Data, Id(..), balls, cueBall, floor, tableSurface, tableWalls)
+module Bodies exposing
+    ( Data
+    , Id(..)
+    , areaBehindTheHeadString
+    , areaBehindTheHeadStringEntity
+    , balls
+    , cueBall
+    , floor
+    , tableSurface
+    , tableWalls
+    )
 
 import Angle
 import Axis3d
@@ -9,14 +19,18 @@ import Direction3d
 import Length exposing (Meters, meters, millimeters)
 import Mass
 import Physics.Body as Body exposing (Body)
-import Physics.Coordinates exposing (BodyCoordinates)
+import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
 import Physics.Material exposing (Material)
 import Physics.Shape
+import Point2d
 import Point3d
 import Pool exposing (Ball)
 import Quantity exposing (Quantity(..))
+import Rectangle2d
+import Rectangle3d exposing (Rectangle3d)
 import Scene3d exposing (Entity)
 import Scene3d.Material as Material
+import SketchPlane3d exposing (SketchPlane3d)
 import Sphere3d exposing (Sphere3d)
 import Vector3d
 
@@ -33,6 +47,42 @@ type alias Data =
     { entity : Entity BodyCoordinates
     , id : Id
     }
+
+
+areaBehindTheHeadString : Rectangle3d Meters WorldCoordinates
+areaBehindTheHeadString =
+    Rectangle3d.on
+        SketchPlane3d.xy
+        (Rectangle2d.from
+            (Point2d.meters
+                -(sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
+                -(sizes.halfLength - sizes.wallThickness - sizes.ballRadius)
+            )
+            (Point2d.meters
+                (sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
+                -((sizes.halfLength - sizes.wallThickness) / 2)
+            )
+        )
+        |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
+
+
+areaBehindTheHeadStringEntity : Entity WorldCoordinates
+areaBehindTheHeadStringEntity =
+    case Rectangle3d.vertices areaBehindTheHeadString of
+        [ v1, v2, v3, v4 ] ->
+            Scene3d.quad
+                (Material.nonmetal
+                    { baseColor = Color.rgb255 80 80 0
+                    , roughness = 1
+                    }
+                )
+                v1
+                v2
+                v3
+                v4
+
+        _ ->
+            Scene3d.nothing
 
 
 radius : Float
@@ -161,6 +211,7 @@ sizes :
     , height : Float
     , thickness : Float
     , floorHalfSize : Float
+    , ballRadius : Float
     }
 sizes =
     let
@@ -183,6 +234,7 @@ sizes =
     , height = 0.45 -- distance from the floor until the top of the table
     , thickness = 0.03 -- the height of table top
     , floorHalfSize = 15
+    , ballRadius = 57.15 / 2000
     }
 
 
