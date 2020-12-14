@@ -11,6 +11,7 @@ import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
+import EightBall exposing (AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool)
 import Force
 import Geometry
 import Html exposing (Html)
@@ -72,9 +73,9 @@ type ShootButtonState
 
 
 type State
-    = PlacingBehindHeadString
-    | Playing
-    | Simulating
+    = PlacingBehindHeadString (Pool AwaitingPlaceBallBehindHeadstring)
+    | Playing (Pool AwaitingNextShot)
+    | Simulating (Pool AwaitingNextShot)
 
 
 type Msg
@@ -94,9 +95,13 @@ initial ballTextures roughnessTexture ( width, height ) =
         world =
             Bodies.balls roughnessTexture ballTextures
                 |> List.foldl World.add initialWorld
+
+        time =
+            -- TODO: consider getting the initial time
+            Time.millisToPosix 0
     in
     { world = world
-    , time = Time.millisToPosix 0 -- TODO: consider getting the initial time
+    , time = time
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
     , focalPoint = Point3d.origin
@@ -107,7 +112,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     , hitElevation = Angle.degrees 0
     , mouseAction = Still
     , shootButtonState = Released
-    , state = PlacingBehindHeadString
+    , state = PlacingBehindHeadString (EightBall.rack time EightBall.start)
     }
 
 
@@ -183,7 +188,7 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
 
         bodies =
             case model.state of
-                PlacingBehindHeadString ->
+                PlacingBehindHeadString _ ->
                     World.bodies world
                         |> List.filter
                             (\b ->
@@ -204,10 +209,10 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
 
         entitiesWithUI =
             case model.state of
-                PlacingBehindHeadString ->
+                PlacingBehindHeadString _ ->
                     Bodies.areaBehindTheHeadStringEntity :: entities
 
-                Playing ->
+                Playing _ ->
                     cueEntity model :: entities
 
                 _ ->
@@ -285,17 +290,11 @@ cueEntity model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Sub.batch
         [ Browser.Events.onResize Resize
-        , if model.state == Simulating then
-            Sub.none
-
-          else
-            Sub.batch
-                [ Browser.Events.onKeyDown (decodeKey ShootButtonDown)
-                , Browser.Events.onKeyUp (decodeKey ShootButtonUp)
-                ]
+        , Browser.Events.onKeyDown (decodeKey ShootButtonDown)
+        , Browser.Events.onKeyUp (decodeKey ShootButtonUp)
         , Browser.Events.onAnimationFrame Tick
         , Browser.Events.onMouseDown (decodeMouse MouseDown)
         , Browser.Events.onMouseMove (decodeMouse MouseMove)
@@ -333,10 +332,10 @@ update msg model =
                     { model | time = time }
             in
             case newModel.state of
-                PlacingBehindHeadString ->
+                PlacingBehindHeadString _ ->
                     newModel
 
-                Playing ->
+                Playing _ ->
                     { newModel
                         | shootButtonState =
                             case newModel.shootButtonState of
@@ -347,10 +346,10 @@ update msg model =
                                     Released
                     }
 
-                Simulating ->
+                Simulating pool ->
                     if ballsStoppedMoving newModel.world then
                         { newModel
-                            | state = Playing
+                            | state = Playing pool
                             , hitRelativeAzimuth = Angle.degrees 0
                             , hitElevation = Angle.degrees 0
                             , focalPoint = cuePosition newModel.world
@@ -379,11 +378,11 @@ update msg model =
 
         MouseDown mouse ->
             case model.state of
-                PlacingBehindHeadString ->
+                PlacingBehindHeadString pool ->
                     case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBehindTheHeadString of
                         Just point ->
                             { model
-                                | state = Playing
+                                | state = Playing (EightBall.ballPlacedBehindHeadString model.time pool)
                                 , focalPoint = point
                                 , world =
                                     World.update
@@ -400,7 +399,7 @@ update msg model =
                         Nothing ->
                             { model | mouseAction = Orbiting mouse }
 
-                Playing ->
+                Playing _ ->
                     case World.raycast (ray model mouse) model.world of
                         Just raycastResult ->
                             case (Body.data raycastResult.body).id of
@@ -441,7 +440,7 @@ update msg model =
                         Nothing ->
                             { model | mouseAction = Orbiting mouse }
 
-                Simulating ->
+                Simulating _ ->
                     { model | mouseAction = Orbiting mouse }
 
         MouseMove mouse ->
@@ -483,34 +482,40 @@ update msg model =
                     }
 
                 _ ->
-                    if model.state == Playing then
-                        case World.raycast (ray model mouse) model.world of
-                            Just raycastResult ->
-                                case (Body.data raycastResult.body).id of
-                                    CueBall ->
-                                        { model | mouseAction = HoveringCueBall }
+                    case model.state of
+                        Playing _ ->
+                            case World.raycast (ray model mouse) model.world of
+                                Just raycastResult ->
+                                    case (Body.data raycastResult.body).id of
+                                        CueBall ->
+                                            { model | mouseAction = HoveringCueBall }
 
-                                    _ ->
-                                        model
+                                        _ ->
+                                            model
 
-                            Nothing ->
-                                model
+                                Nothing ->
+                                    model
 
-                    else
-                        model
+                        _ ->
+                            model
 
         MouseUp ->
             { model | mouseAction = Still }
 
         ShootButtonDown ->
-            { model | shootButtonState = Pressed (Duration.milliseconds 0) }
+            case model.state of
+                Playing _ ->
+                    { model | shootButtonState = Pressed (Duration.milliseconds 0) }
+
+                _ ->
+                    model
 
         ShootButtonUp ->
             -- TODO: check if can shoot
-            case model.shootButtonState of
-                Pressed _ ->
+            case ( model.shootButtonState, model.state ) of
+                ( Pressed _, Playing pool ) ->
                     { model
-                        | state = Simulating
+                        | state = Simulating pool
                         , focalPoint = Point3d.origin
                         , world =
                             World.update
