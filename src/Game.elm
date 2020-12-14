@@ -32,6 +32,7 @@ import Scene3d.Light
 import Scene3d.Material as Material
 import SketchPlane3d
 import Speed
+import Time exposing (Posix)
 import Vector2d
 import Vector3d
 import Viewpoint3d
@@ -54,6 +55,7 @@ type alias Model =
     , mouseAction : MouseState
     , shootButtonState : ShootButtonState
     , state : State
+    , time : Posix
     }
 
 
@@ -76,7 +78,7 @@ type State
 
 
 type Msg
-    = Tick
+    = Tick Time.Posix
     | Resize Int Int
     | MouseWheel Float
     | MouseDown (Point2d Pixels ScreenCoordinates)
@@ -94,6 +96,7 @@ initial ballTextures roughnessTexture ( width, height ) =
                 |> List.foldl World.add initialWorld
     in
     { world = world
+    , time = Time.millisToPosix 0 -- TODO: consider getting the initial time
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
     , focalPoint = Point3d.origin
@@ -286,13 +289,14 @@ subscriptions model =
     Sub.batch
         [ Browser.Events.onResize Resize
         , if model.state == Simulating then
-            Browser.Events.onAnimationFrame (\_ -> Tick)
+            Sub.none
 
           else
             Sub.batch
                 [ Browser.Events.onKeyDown (decodeKey ShootButtonDown)
                 , Browser.Events.onKeyUp (decodeKey ShootButtonUp)
                 ]
+        , Browser.Events.onAnimationFrame Tick
         , Browser.Events.onMouseDown (decodeMouse MouseDown)
         , Browser.Events.onMouseMove (decodeMouse MouseMove)
         , Browser.Events.onMouseUp (Json.Decode.succeed MouseUp)
@@ -323,15 +327,19 @@ ballsStoppedMoving world =
 update : Msg -> Model -> Model
 update msg model =
     case msg of
-        Tick ->
-            case model.state of
+        Tick time ->
+            let
+                newModel =
+                    { model | time = time }
+            in
+            case newModel.state of
                 PlacingBehindHeadString ->
-                    model
+                    newModel
 
                 Playing ->
-                    { model
+                    { newModel
                         | shootButtonState =
-                            case model.shootButtonState of
+                            case newModel.shootButtonState of
                                 Pressed duration ->
                                     Pressed (Quantity.plus duration (seconds (1 / 120)))
 
@@ -340,20 +348,20 @@ update msg model =
                     }
 
                 Simulating ->
-                    if ballsStoppedMoving model.world then
-                        { model
+                    if ballsStoppedMoving newModel.world then
+                        { newModel
                             | state = Playing
                             , hitRelativeAzimuth = Angle.degrees 0
                             , hitElevation = Angle.degrees 0
-                            , focalPoint = cuePosition model.world
+                            , focalPoint = cuePosition newModel.world
                             , cueElevation = Angle.degrees 5
                         }
 
                     else
-                        { model
+                        { newModel
                             | world =
                                 -- Simulate at shorter interval to prevent tunneling
-                                model.world
+                                newModel.world
                                     |> World.simulate (seconds (1 / 120))
                                     |> World.simulate (seconds (1 / 120))
                         }
