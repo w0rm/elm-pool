@@ -44,29 +44,28 @@ type alias Model =
     { world : World Data
     , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
     , distance : Length
-    , azimuth : Angle
-    , elevation : Angle
-    , mouseAction : MouseAction
+    , focalPoint : Point3d Meters WorldCoordinates
+    , cameraAzimuth : Angle
+    , cameraElevation : Angle
+    , cueElevation : Angle
+    , hitElevation : Angle
+    , hitRelativeAzimuth : Angle
+    , mouseAction : MouseState
+    , shootButtonState : ShootButtonState
     , state : State
     }
 
 
-type MouseAction
-    = Orbiting
-        { from : Point2d Pixels ScreenCoordinates
-        , to : Point2d Pixels ScreenCoordinates
-        }
-    | HoveringCue
-        { point : Point2d Pixels ScreenCoordinates
-        , raycastResult : World.RaycastResult Data
-        }
-    | Aiming
-        { from : Point2d Pixels ScreenCoordinates
-        , to : Point2d Pixels ScreenCoordinates
-        , raycastResult : World.RaycastResult Data
-        , duration : Duration
-        }
+type MouseState
+    = Orbiting (Point2d Pixels ScreenCoordinates)
+    | HoveringCueBall -- TODO: use to render the clickable area
+    | SettingCueElevation (Point2d Pixels ScreenCoordinates)
     | Still
+
+
+type ShootButtonState
+    = Pressed Duration
+    | Released
 
 
 type State
@@ -81,18 +80,28 @@ type Msg
     | MouseDown (Point2d Pixels ScreenCoordinates)
     | MouseUp
     | MouseMove (Point2d Pixels ScreenCoordinates)
+    | ShootButtonDown
+    | ShootButtonUp
 
 
 initial : Dict Int (Material.Texture Color) -> Material.Texture Float -> ( Float, Float ) -> Model
 initial ballTextures roughnessTexture ( width, height ) =
-    { world =
-        Bodies.balls roughnessTexture ballTextures
-            |> List.foldl World.add initialWorld
+    let
+        world =
+            Bodies.balls roughnessTexture ballTextures
+                |> List.foldl World.add initialWorld
+    in
+    { world = world
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
-    , azimuth = Angle.degrees -25
-    , elevation = Angle.degrees 30
+    , focalPoint = cuePosition world
+    , cameraAzimuth = Angle.degrees -25
+    , cameraElevation = Angle.degrees 30
+    , cueElevation = Angle.degrees 5
+    , hitRelativeAzimuth = Angle.degrees 0
+    , hitElevation = Angle.degrees 0
     , mouseAction = Still
+    , shootButtonState = Released
     , state = Playing
     }
 
@@ -109,40 +118,15 @@ initialWorld =
         |> World.add Bodies.cueBall
 
 
-camera : Length -> Angle -> Angle -> MouseAction -> World Data -> Camera3d Meters WorldCoordinates
-camera distance azimuth elevation mouseAction world =
-    let
-        { x, y } =
-            case mouseAction of
-                Orbiting { from, to } ->
-                    Vector2d.toPixels (Vector2d.from from to)
-
-                _ ->
-                    Vector2d.toPixels Vector2d.zero
-
-        newAzimuth =
-            azimuth |> Quantity.minus (Angle.degrees x)
-
-        newElevation =
-            elevation
-                |> Quantity.plus (Angle.degrees y)
-                |> Quantity.clamp
-                    (Angle.degrees 6)
-                    (Angle.degrees 90)
-
-        focalPoint =
-            Point3d.interpolateFrom
-                (cuePosition world)
-                Point3d.origin
-                ((Length.inMeters distance - 0.5) / (5 - 0.5))
-    in
+camera : Length -> Angle -> Angle -> Point3d Meters WorldCoordinates -> Camera3d Meters WorldCoordinates
+camera distance cameraAzimuth cameraElevation focalPoint =
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.orbit
                 { focalPoint = focalPoint
                 , groundPlane = SketchPlane3d.xy
-                , azimuth = newAzimuth
-                , elevation = newElevation
+                , azimuth = cameraAzimuth
+                , elevation = cameraElevation
                 , distance = distance
                 }
         , verticalFieldOfView = Angle.degrees 24
@@ -159,9 +143,9 @@ cuePosition world =
 
 
 ray : Model -> Point2d Pixels ScreenCoordinates -> Axis3d Meters WorldCoordinates
-ray { dimensions, distance, azimuth, elevation, mouseAction, world } =
+ray { dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } =
     Camera3d.ray
-        (camera distance azimuth elevation mouseAction world)
+        (camera distance cameraAzimuth cameraElevation focalPoint)
         (Rectangle2d.with
             { x1 = pixels 0
             , y1 = Tuple.second dimensions
@@ -172,7 +156,7 @@ ray { dimensions, distance, azimuth, elevation, mouseAction, world } =
 
 
 view : Model -> Html Msg
-view { world, dimensions, distance, azimuth, elevation, mouseAction } =
+view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } as model) =
     let
         dimensionsInt =
             Tuple.mapBoth Quantity.round Quantity.round dimensions
@@ -202,18 +186,9 @@ view { world, dimensions, distance, azimuth, elevation, mouseAction } =
                     )
 
         entitiesWithCue =
-            case mouseAction of
-                Aiming aiming ->
-                    cueEntity aiming :: entities
-
-                HoveringCue { point, raycastResult } ->
-                    cueEntity
-                        { duration = Quantity.zero
-                        , from = point
-                        , to = point
-                        , raycastResult = raycastResult
-                        }
-                        :: entities
+            case model.state of
+                Playing ->
+                    cueEntity model :: entities
 
                 _ ->
                     entities
@@ -231,7 +206,7 @@ view { world, dimensions, distance, azimuth, elevation, mouseAction } =
         [ Scene3d.custom
             { dimensions = dimensionsInt
             , antialiasing = Scene3d.noAntialiasing
-            , camera = camera distance azimuth elevation mouseAction world
+            , camera = camera distance cameraAzimuth cameraElevation focalPoint
             , entities = entitiesWithCue
             , lights = Scene3d.twoLights environmentalLighting sunlight
             , exposure = Scene3d.exposureValue 13
@@ -243,55 +218,31 @@ view { world, dimensions, distance, azimuth, elevation, mouseAction } =
         ]
 
 
-axisFromMouseAction :
-    { from : Point2d Pixels ScreenCoordinates
-    , to : Point2d Pixels ScreenCoordinates
-    , raycastResult : World.RaycastResult Data
-    , duration : Duration
-    }
-    -> Axis3d Meters WorldCoordinates
-axisFromMouseAction { from, to, raycastResult } =
+cueAxis : Model -> Axis3d Meters WorldCoordinates
+cueAxis { cameraAzimuth, hitRelativeAzimuth, cueElevation, hitElevation, world } =
     let
-        { x, y } =
-            Vector2d.toPixels (Vector2d.from from to)
+        hitAzimuth =
+            cameraAzimuth
+                |> Quantity.plus hitRelativeAzimuth
 
-        frame =
-            Body.frame raycastResult.body
-
-        normal =
-            Direction3d.placeIn frame raycastResult.normal
+        pointDirection =
+            Direction3d.xyZ hitAzimuth hitElevation
 
         point =
-            Point3d.placeIn frame raycastResult.point
+            cuePosition world
+                |> Point3d.translateIn pointDirection (Length.millimeters (57.15 / 2))
 
-        azimuth =
-            Direction3d.azimuthIn SketchPlane3d.xy normal
-
-        elevation =
-            Direction3d.elevationFrom SketchPlane3d.xy normal
-
-        newAzimuth =
-            azimuth |> Quantity.plus (Angle.degrees x)
-
-        newElevation =
-            elevation |> Quantity.minus (Angle.degrees y)
+        axisDirection =
+            Direction3d.xyZ cameraAzimuth cueElevation
     in
-    Axis3d.through
-        point
-        (Direction3d.fromAzimuthInAndElevationFrom SketchPlane3d.xy newAzimuth newElevation)
+    Axis3d.through point axisDirection
 
 
-cueEntity :
-    { from : Point2d Pixels ScreenCoordinates
-    , to : Point2d Pixels ScreenCoordinates
-    , raycastResult : World.RaycastResult Data
-    , duration : Duration
-    }
-    -> Scene3d.Entity WorldCoordinates
-cueEntity mouseAction =
+cueEntity : Model -> Scene3d.Entity WorldCoordinates
+cueEntity model =
     let
         axis =
-            axisFromMouseAction mouseAction
+            cueAxis model
 
         maybeCylinder =
             Cylinder3d.from
@@ -321,7 +272,10 @@ subscriptions model =
             Browser.Events.onAnimationFrame (\_ -> Tick)
 
           else
-            Sub.none
+            Sub.batch
+                [ Browser.Events.onKeyDown (decodeKey ShootButtonDown)
+                , Browser.Events.onKeyUp (decodeKey ShootButtonUp)
+                ]
         , Browser.Events.onMouseDown (decodeMouse MouseDown)
         , Browser.Events.onMouseMove (decodeMouse MouseMove)
         , Browser.Events.onMouseUp (Json.Decode.succeed MouseUp)
@@ -356,7 +310,13 @@ update msg model =
             case model.state of
                 Simulating ->
                     if ballsStoppedMoving model.world then
-                        { model | state = Playing }
+                        { model
+                            | state = Playing
+                            , hitRelativeAzimuth = Angle.degrees 0
+                            , hitElevation = Angle.degrees 0
+                            , focalPoint = cuePosition model.world
+                            , cueElevation = Angle.degrees 5
+                        }
 
                     else
                         { model
@@ -368,7 +328,15 @@ update msg model =
                         }
 
                 Playing ->
-                    model
+                    { model
+                        | shootButtonState =
+                            case model.shootButtonState of
+                                Pressed duration ->
+                                    Pressed (Quantity.plus duration (seconds (1 / 120)))
+
+                                Released ->
+                                    Released
+                    }
 
         Resize width height ->
             { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
@@ -388,32 +356,82 @@ update msg model =
                         Just raycastResult ->
                             case (Body.data raycastResult.body).id of
                                 CueBall ->
-                                    { model
-                                        | mouseAction =
-                                            Aiming
-                                                { raycastResult = raycastResult
-                                                , from = mouse
-                                                , to = mouse
-                                                , duration = Duration.seconds 5
-                                                }
-                                    }
+                                    let
+                                        frame =
+                                            Body.frame raycastResult.body
+
+                                        normal =
+                                            Direction3d.placeIn frame raycastResult.normal
+
+                                        hitAzimuth =
+                                            Direction3d.azimuthIn SketchPlane3d.xy normal
+
+                                        hitElevation =
+                                            Direction3d.elevationFrom SketchPlane3d.xy normal
+
+                                        hitRelativeAzimuth =
+                                            Quantity.minus model.cameraAzimuth hitAzimuth
+
+                                        hitRelativeAzimuthDegrees =
+                                            Angle.inDegrees hitRelativeAzimuth
+                                    in
+                                    -- Can only click on the visible hemisphere
+                                    if abs hitRelativeAzimuthDegrees < 90 then
+                                        { model
+                                            | mouseAction = SettingCueElevation mouse
+                                            , hitElevation = hitElevation
+                                            , hitRelativeAzimuth = hitRelativeAzimuth
+                                        }
+
+                                    else
+                                        { model | mouseAction = Orbiting mouse }
 
                                 _ ->
-                                    { model | mouseAction = Orbiting { from = mouse, to = mouse } }
+                                    { model | mouseAction = Orbiting mouse }
 
                         Nothing ->
-                            { model | mouseAction = Orbiting { from = mouse, to = mouse } }
+                            { model | mouseAction = Orbiting mouse }
 
                 Simulating ->
-                    { model | mouseAction = Orbiting { from = mouse, to = mouse } }
+                    { model | mouseAction = Orbiting mouse }
 
         MouseMove mouse ->
             case model.mouseAction of
-                Orbiting { from } ->
-                    { model | mouseAction = Orbiting { from = from, to = mouse } }
+                Orbiting from ->
+                    let
+                        { x, y } =
+                            Vector2d.toPixels (Vector2d.from from mouse)
 
-                Aiming aiming ->
-                    { model | mouseAction = Aiming { aiming | to = mouse } }
+                        cameraAzimuth =
+                            model.cameraAzimuth |> Quantity.minus (Angle.degrees x)
+
+                        cameraElevation =
+                            model.cameraElevation
+                                |> Quantity.plus (Angle.degrees y)
+                                |> Quantity.clamp
+                                    (Angle.degrees 6)
+                                    (Angle.degrees 90)
+                    in
+                    { model
+                        | mouseAction = Orbiting mouse
+                        , cameraAzimuth = cameraAzimuth
+                        , cameraElevation = cameraElevation
+                    }
+
+                SettingCueElevation point ->
+                    let
+                        { y } =
+                            Vector2d.toPixels (Vector2d.from point mouse)
+
+                        cueElevation =
+                            model.cueElevation
+                                |> Quantity.minus (Angle.degrees y)
+                                |> Quantity.clamp (Angle.degrees -90) (Angle.degrees 90)
+                    in
+                    { model
+                        | mouseAction = SettingCueElevation mouse
+                        , cueElevation = cueElevation
+                    }
 
                 _ ->
                     if model.state == Playing then
@@ -421,13 +439,7 @@ update msg model =
                             Just raycastResult ->
                                 case (Body.data raycastResult.body).id of
                                     CueBall ->
-                                        { model
-                                            | mouseAction =
-                                                HoveringCue
-                                                    { point = mouse
-                                                    , raycastResult = raycastResult
-                                                    }
-                                        }
+                                        { model | mouseAction = HoveringCueBall }
 
                                     _ ->
                                         model
@@ -439,44 +451,30 @@ update msg model =
                         model
 
         MouseUp ->
-            case model.mouseAction of
-                Orbiting { from, to } ->
-                    let
-                        { x, y } =
-                            Vector2d.toPixels (Vector2d.from from to)
+            { model | mouseAction = Still }
 
-                        newAzimuth =
-                            model.azimuth |> Quantity.minus (Angle.degrees x)
+        ShootButtonDown ->
+            { model | shootButtonState = Pressed (Duration.milliseconds 0) }
 
-                        newElevation =
-                            model.elevation
-                                |> Quantity.plus (Angle.degrees y)
-                                |> Quantity.clamp
-                                    (Angle.degrees 6)
-                                    (Angle.degrees 90)
-                    in
-                    { model
-                        | mouseAction = Still
-                        , azimuth = newAzimuth
-                        , elevation = newElevation
-                    }
-
-                Aiming mouseAction ->
+        ShootButtonUp ->
+            -- TODO: check if can shoot
+            case model.shootButtonState of
+                Pressed _ ->
                     { model
                         | state = Simulating
+                        , focalPoint = Point3d.origin
                         , world =
                             World.update
                                 (\b ->
                                     if (Body.data b).id == CueBall then
                                         let
                                             axis =
-                                                axisFromMouseAction mouseAction
+                                                cueAxis model
                                         in
+                                        -- TODO use the duration from the Pressed state to calculate the force
                                         Body.applyImpulse
                                             (Quantity.times (Duration.milliseconds 16) (Force.newtons 50))
-                                            (Axis3d.reverse axis
-                                                |> Axis3d.direction
-                                            )
+                                            (Axis3d.reverse axis |> Axis3d.direction)
                                             (Axis3d.originPoint axis)
                                             b
 
@@ -496,3 +494,16 @@ decodeMouse msg =
     Json.Decode.map2 (\x y -> msg (Point2d.pixels x y))
         (Json.Decode.field "pageX" Json.Decode.float)
         (Json.Decode.field "pageY" Json.Decode.float)
+
+
+decodeKey : Msg -> Json.Decode.Decoder Msg
+decodeKey msg =
+    Json.Decode.andThen
+        (\key ->
+            if key == " " then
+                Json.Decode.succeed msg
+
+            else
+                Json.Decode.fail ""
+        )
+        (Json.Decode.field "key" Json.Decode.string)

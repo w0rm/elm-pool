@@ -5,7 +5,7 @@ import Browser.Dom
 import Color exposing (Color)
 import Dict exposing (Dict)
 import Game
-import Html exposing (Html)
+import Html
 import Scene3d.Material as Material
 import Task
 import WebGL.Texture exposing (defaultOptions)
