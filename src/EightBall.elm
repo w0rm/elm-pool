@@ -1,5 +1,5 @@
 module EightBall exposing
-    ( Pool, start
+    ( Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
     , CurrentTarget(..)
     , currentPlayer, currentScore, currentTarget
     , rack, ballPlacedBehindHeadString, playerShot
@@ -23,7 +23,7 @@ module EightBall exposing
 
 # Init
 
-@docs Pool, start
+@docs Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
 
 
 # View
