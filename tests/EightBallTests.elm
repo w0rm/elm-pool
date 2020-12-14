@@ -126,6 +126,28 @@ suite =
                                     "Should be EightBall.NextShot, but found this instead:\n"
                                         ++ Debug.toString other
                     )
+                , test "after player shoots cue hits ball, but doesn't pocket it, next players turn"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 0) EightBall.twoBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal 1
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
                 , test "after player shoots cue hits nothing, and next player hits nothing, back to first"
                     (\_ ->
                         let
@@ -233,14 +255,16 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.NextShot pool ->
+                            EightBall.PlayersFault pool ->
                                 pool
-                                    |> EightBall.currentTarget
-                                    |> Expect.equal EightBall.OpenTable
+                                    |> Expect.all
+                                        [ EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        , EightBall.currentPlayer >> Expect.equal 1
+                                        ]
 
                             other ->
                                 Expect.fail <|
-                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 ]

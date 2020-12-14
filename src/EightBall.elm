@@ -297,6 +297,7 @@ type CurrentTarget
     = OpenTable
     | Solids
     | Stripes
+    | EightBall
 
 
 currentTarget : Pool state -> CurrentTarget
@@ -436,10 +437,9 @@ scratch when =
 -- Ruling
 
 
-type
-    WhatHappened
-    -- = PlayersFault (Pool AwaitingBallInHand)
-    = NextShot (Pool AwaitingNextShot)
+type WhatHappened
+    = PlayersFault (Pool AwaitingBallInHand)
+    | NextShot (Pool AwaitingNextShot)
       -- | NextTurn (Pool AwaitingNextTurn)
     | GameOver (Pool AwaitingNewGame) { winner : Int }
     | Error String
@@ -480,15 +480,25 @@ playerShot shotEvents (Pool data) =
                            ]
                         |> List.sortWith eventTimeComparison
 
+                ballPocketedEvents =
+                    groupPocketedEvents shotEvents
+
                 newPoolData =
                     { data
                         | events = allEventDataSorted
                         , target =
-                            checkNextTarget shotEvents
+                            checkNextTarget
+                                ballPocketedEvents
+                                data
+                        , pocketed =
+                            updatePocketed
+                                ballPocketedEvents
                                 data
                     }
             in
-            checkShot shotEvents newPoolData
+            checkShot shotEvents
+                ballPocketedEvents
+                newPoolData
 
 
 {-| TODO: May need to check for equal times and put things like Racked before BallPlacedBehindHeadString.
@@ -509,10 +519,56 @@ shotEventTimeComparison ( time1, _ ) ( time2, _ ) =
         (Time.toMillis Time.utc time2)
 
 
-checkNextTarget : List ( Time.Posix, ShotEvent ) -> PoolData -> TargetBalls
-checkNextTarget shotEvents poolData =
+checkNextTarget : BallPocketedEvents -> PoolData -> TargetBalls
+checkNextTarget { allPocketedBalls, solidsPocketed, stripesPocketed } poolData =
+    case poolData.target of
+        Open ->
+            if
+                List.length allPocketedBalls > 0
+                -- TODO: and player did not foul.
+            then
+                if List.length solidsPocketed == List.length allPocketedBalls then
+                    -- All balls pocketed are solids.
+                    Grouped
+                        { solids =
+                            poolData.player
+                        }
+
+                else if List.length stripesPocketed == List.length allPocketedBalls then
+                    -- All balls pocketed are stripes.
+                    Grouped
+                        { solids =
+                            switchPlayer poolData.player
+                        }
+
+                else
+                    poolData.target
+
+            else
+                poolData.target
+
+        Grouped _ ->
+            poolData.target
+
+
+type alias BallPocketedEvents =
+    { allPocketedBalls : List ( Time.Posix, ShotEvent )
+    , solidsPocketed : List ( Time.Posix, ShotEvent )
+    , stripesPocketed : List ( Time.Posix, ShotEvent )
+    , scratched : Bool
+    , eightBallPocketed : Bool
+    }
+
+
+{-| Categorize ball pocketing events.
+
+TODO: It would be more efficient to fold over the list.
+
+-}
+groupPocketedEvents : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents
+groupPocketedEvents shotEvents =
     let
-        ballPocketedEvents =
+        allPocketedBalls =
             List.filter
                 (\( shotTime, shotEvent ) ->
                     case shotEvent of
@@ -527,40 +583,48 @@ checkNextTarget shotEvents poolData =
                 )
                 shotEvents
 
-        solidsPocketed =
-            List.filter (ballPocketedInGroup SolidGroup) ballPocketedEvents
+        scratched =
+            List.any
+                (\( shotTime, shotEvent ) ->
+                    case shotEvent of
+                        BallToPocket ball ->
+                            False
 
-        stripesPocketed =
-            List.filter (ballPocketedInGroup StripeGroup) ballPocketedEvents
+                        CueHitBall ball ->
+                            False
+
+                        Scratch ->
+                            True
+                )
+                allPocketedBalls
     in
-    case poolData.target of
-        Open ->
-            if
-                List.length ballPocketedEvents > 0
-                -- TODO: and player did not foul.
-            then
-                if List.length solidsPocketed == List.length ballPocketedEvents then
-                    -- All balls pocketed are solids.
-                    Grouped
-                        { solids =
-                            poolData.player
-                        }
+    { allPocketedBalls = allPocketedBalls
+    , scratched = scratched
+    , solidsPocketed = List.filter (ballPocketedInGroup SolidGroup) allPocketedBalls
+    , stripesPocketed = List.filter (ballPocketedInGroup StripeGroup) allPocketedBalls
+    , eightBallPocketed = List.any (ballPocketedInGroup EightGroup) allPocketedBalls
+    }
 
-                else if List.length stripesPocketed == List.length ballPocketedEvents then
-                    -- All balls pocketed are stripes.
-                    Grouped
-                        { solids =
-                            switchPlayer poolData.player
-                        }
 
-                else
-                    poolData.target
+updatePocketed : BallPocketedEvents -> PoolData -> List ( Ball, Player )
+updatePocketed ballPocketedEvents poolData =
+    let
+        newPocketedBalls =
+            (ballPocketedEvents.solidsPocketed
+                ++ ballPocketedEvents.stripesPocketed
+            )
+                |> List.filterMap
+                    (\( _, shotEvent ) ->
+                        case shotEvent of
+                            BallToPocket ball ->
+                                Just ( ball, poolData.player )
 
-            else
-                poolData.target
-
-        Grouped { solids } ->
-            poolData.target
+                            _ ->
+                                Nothing
+                    )
+    in
+    List.append poolData.pocketed
+        newPocketedBalls
 
 
 type BallGroup
@@ -594,47 +658,80 @@ isValidHit shotEvents poolData =
     True
 
 
-checkShot : List ( Time.Posix, ShotEvent ) -> PoolData -> WhatHappened
-checkShot shotEvents poolData =
-    case shotEvents of
-        [] ->
-            if False then
-                GameOver
-                    (Pool poolData)
-                    { winner = playerToInt poolData.player
-                    }
+checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> PoolData -> WhatHappened
+checkShot shotEvents ballPocketedEvents poolData =
+    if ballPocketedEvents.eightBallPocketed then
+        Debug.todo "Handle game over."
 
-            else
-                NextShot <|
-                    Pool poolData
+    else if ballPocketedEvents.scratched then
+        PlayersFault
+            (Pool
+                { poolData
+                    | player = switchPlayer poolData.player
+                }
+            )
 
-        ( _, CueHitBall ball ) :: otherShots ->
-            -- TODO (8ball): Check if ball is player's object ball.
-            let
-                newPoolData =
-                    poolData
-            in
-            checkShot otherShots newPoolData
+    else
+        NextShot <|
+            Pool
+                { poolData
+                    | player = checkNextPlayer ballPocketedEvents poolData
+                }
 
-        ( _, BallToPocket ball ) :: otherShots ->
-            -- TODO (8ball): Check if ball is player's object ball.
-            let
-                newPoolData =
-                    { poolData
-                        | pocketed =
-                            poolData.pocketed
-                                ++ [ ( ball, poolData.player )
-                                   ]
-                    }
-            in
-            checkShot otherShots newPoolData
 
-        ( _, Scratch ) :: otherShots ->
-            let
-                newPoolData =
-                    poolData
-            in
-            checkShot otherShots newPoolData
+{-| Check who should be the next player.
+-}
+checkNextPlayer : BallPocketedEvents -> PoolData -> Player
+checkNextPlayer ({ allPocketedBalls, eightBallPocketed, solidsPocketed, stripesPocketed, scratched } as ballPocketedEvents) poolData =
+    if scratched then
+        switchPlayer poolData.player
+
+    else if List.length allPocketedBalls == 0 then
+        switchPlayer poolData.player
+
+    else
+        case currentTarget (Pool poolData) of
+            OpenTable ->
+                if pocketedInSameGroup ballPocketedEvents then
+                    poolData.player
+
+                else
+                    switchPlayer poolData.player
+
+            Solids ->
+                if List.all (ballPocketedInGroup SolidGroup) allPocketedBalls then
+                    poolData.player
+
+                else
+                    switchPlayer poolData.player
+
+            Stripes ->
+                if List.all (ballPocketedInGroup StripeGroup) allPocketedBalls then
+                    poolData.player
+
+                else
+                    switchPlayer poolData.player
+
+            EightBall ->
+                if eightBallPocketed then
+                    poolData.player
+
+                else
+                    switchPlayer poolData.player
+
+
+pocketedInSameGroup : BallPocketedEvents -> Bool
+pocketedInSameGroup { solidsPocketed, stripesPocketed } =
+    (List.length solidsPocketed
+        > 0
+        && List.length stripesPocketed
+        == 0
+    )
+        || (List.length stripesPocketed
+                > 0
+                && List.length solidsPocketed
+                == 0
+           )
 
 
 {-| When a player shoots, but sends no events, we still want to log the event, so we try to find the last event time. If there is none, default to `Time.millisToPosix 0`.
