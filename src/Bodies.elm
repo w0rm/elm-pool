@@ -1,6 +1,8 @@
 module Bodies exposing
     ( Data
     , Id(..)
+    , areaBallInHand
+    , areaBallInHandEntity
     , areaBehindTheHeadString
     , areaBehindTheHeadStringEntity
     , balls
@@ -49,6 +51,42 @@ type alias Data =
     }
 
 
+areaBallInHand : Rectangle3d Meters WorldCoordinates
+areaBallInHand =
+    Rectangle3d.on
+        SketchPlane3d.xy
+        (Rectangle2d.from
+            (Point2d.meters
+                -(sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
+                -(sizes.halfLength - sizes.wallThickness - sizes.ballRadius)
+            )
+            (Point2d.meters
+                (sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
+                (sizes.halfLength - sizes.wallThickness - sizes.ballRadius)
+            )
+        )
+        |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
+
+
+areaBallInHandEntity : Entity WorldCoordinates
+areaBallInHandEntity =
+    case Rectangle3d.vertices areaBallInHand of
+        [ v1, v2, v3, v4 ] ->
+            Scene3d.quad
+                (Material.nonmetal
+                    { baseColor = Color.rgb255 80 80 0
+                    , roughness = 1
+                    }
+                )
+                v1
+                v2
+                v3
+                v4
+
+        _ ->
+            Scene3d.nothing
+
+
 areaBehindTheHeadString : Rectangle3d Meters WorldCoordinates
 areaBehindTheHeadString =
     Rectangle3d.on
@@ -93,7 +131,7 @@ radius =
 ballSphere : Sphere3d Meters BodyCoordinates
 ballSphere =
     Sphere3d.atPoint
-        (Point3d.millimeters 0 0 radius)
+        (Point3d.millimeters 0 0 0)
         (millimeters radius)
 
 
@@ -152,7 +190,7 @@ balls roughnessTexture ballTextures =
                 |> Body.withMaterial ballMaterial
                 |> Body.withDamping ballDamping
                 |> Body.withBehavior (Body.dynamic (Mass.grams 170))
-                |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) 0)
+                |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) radius)
         )
         numbers
 
@@ -169,7 +207,7 @@ cueBall =
         |> Body.withMaterial ballMaterial
         |> Body.withDamping ballDamping
         |> Body.withBehavior (Body.dynamic (Mass.grams 170))
-        |> Body.translateBy (Vector3d.meters 0 (-2.1 / 4) 0)
+        |> Body.translateBy (Vector3d.meters 0 (-2.1 / 4) radius)
 
 
 ballDamping : { linear : Float, angular : Float }
