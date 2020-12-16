@@ -478,6 +478,55 @@ suite =
                                         ++ Debug.toString other
                     )
                 ]
+            , describe "ballPlacedInHand"
+                [ test "when player scratches, the other player must place ball in hand before continuing to shoot"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.scratch (Time.millisToPosix 789)
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault pool ->
+                                pool
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal 1
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "when player scratches and next player places ball in hand, they may continue to shoot"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.scratch (Time.millisToPosix 789)
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault pool ->
+                                pool
+                                    |> EightBall.ballPlacedInHand (Time.millisToPosix 800)
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal 1
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                ]
             ]
         ]
 

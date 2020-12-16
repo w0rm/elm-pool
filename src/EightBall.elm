@@ -2,7 +2,7 @@ module EightBall exposing
     ( Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
     , CurrentTarget(..)
     , currentPlayer, currentScore, currentTarget
-    , rack, ballPlacedBehindHeadString, playerShot
+    , rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
     , ShotEvent
     , cueHitBall, ballFellInPocket, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
@@ -35,7 +35,7 @@ module EightBall exposing
 
 # Update
 
-@docs rack, ballPlacedBehindHeadString, playerShot
+@docs rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
 
 
 ## Events
@@ -370,12 +370,13 @@ rack when (Pool data) =
 
 type InternalEvent
     = Racked
+      -- Player actions
     | BallPlacedBehindHeadString
-      --       -- Player actions
-      --       -- | CallShot Ball Pocket
-      --       -- | PlaceBallInHand
-    | GameOver_
+    | BallPlacedInHand
+      -- | CallShot Ball Pocket
     | Shot (List ( Time.Posix, ShotEvent ))
+      -- Game over
+    | GameOver_
 
 
 type ShotEvent
@@ -395,6 +396,19 @@ ballPlacedBehindHeadString when (Pool data) =
                 data.events
                     ++ [ { when = when
                          , event = BallPlacedBehindHeadString
+                         }
+                       ]
+        }
+
+
+ballPlacedInHand : Time.Posix -> Pool AwaitingBallInHand -> Pool AwaitingNextShot
+ballPlacedInHand when (Pool data) =
+    Pool
+        { data
+            | events =
+                data.events
+                    ++ [ { when = when
+                         , event = BallPlacedInHand
                          }
                        ]
         }
@@ -815,6 +829,9 @@ lastEventTimeByEventType eventData =
             Just eventData.when
 
         BallPlacedBehindHeadString ->
+            Just eventData.when
+
+        BallPlacedInHand ->
             Just eventData.when
 
         GameOver_ ->
