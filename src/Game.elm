@@ -11,7 +11,7 @@ import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
-import EightBall exposing (AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
+import EightBall exposing (AwaitingBallInHand, AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Geometry
 import Html exposing (Html)
@@ -77,6 +77,7 @@ type State
     = PlacingBehindHeadString (Pool AwaitingPlaceBallBehindHeadstring)
     | Playing (Pool AwaitingNextShot)
     | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingNextShot)
+    | PlacingBallInHand (Pool AwaitingBallInHand)
 
 
 type Msg
@@ -213,6 +214,9 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
                 PlacingBehindHeadString _ ->
                     Bodies.areaBehindTheHeadStringEntity :: entities
 
+                PlacingBallInHand _ ->
+                    Bodies.areaBallInHandEntity :: entities
+
                 Playing _ ->
                     cueEntity model :: entities
 
@@ -333,6 +337,9 @@ update msg model =
                     { model | time = time }
             in
             case newModel.state of
+                PlacingBallInHand _ ->
+                    newModel
+
                 PlacingBehindHeadString _ ->
                     newModel
 
@@ -352,8 +359,8 @@ update msg model =
                         { newModel
                             | state =
                                 case EightBall.playerShot (List.reverse events) pool of
-                                    PlayersFault _ ->
-                                        Debug.todo "AwaitingBallInHand"
+                                    PlayersFault newPool ->
+                                        PlacingBallInHand newPool
 
                                     NextShot newPool ->
                                         Playing newPool
@@ -392,17 +399,51 @@ update msg model =
 
         MouseDown mouse ->
             case model.state of
+                PlacingBallInHand pool ->
+                    case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBallInHand of
+                        Just point ->
+                            let
+                                position =
+                                    Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
+                            in
+                            if canSpawnHere position model.world then
+                                { model
+                                    | focalPoint = position
+
+                                    -- , state = Playing (EightBall.ballPlacedBehindHeadString model.time pool)
+                                    , world =
+                                        World.update
+                                            (\b ->
+                                                if (Body.data b).id == CueBall then
+                                                    Body.moveTo position b
+
+                                                else
+                                                    b
+                                            )
+                                            model.world
+                                }
+
+                            else
+                                { model | mouseAction = Orbiting mouse }
+
+                        Nothing ->
+                            { model | mouseAction = Orbiting mouse }
+
                 PlacingBehindHeadString pool ->
                     case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBehindTheHeadString of
                         Just point ->
+                            let
+                                position =
+                                    Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
+                            in
                             { model
                                 | state = Playing (EightBall.ballPlacedBehindHeadString model.time pool)
-                                , focalPoint = point
+                                , focalPoint = position
                                 , world =
                                     World.update
                                         (\b ->
                                             if (Body.data b).id == CueBall then
-                                                Body.moveTo point b
+                                                Body.moveTo position b
 
                                             else
                                                 b
@@ -555,6 +596,21 @@ update msg model =
 
                 _ ->
                     model
+
+
+canSpawnHere : Point3d Meters WorldCoordinates -> World Data -> Bool
+canSpawnHere point world =
+    List.all
+        (\b ->
+            case (Body.data b).id of
+                Numbered _ ->
+                    Quantity.greaterThan (Length.millimeters 57.15)
+                        (Point3d.distanceFrom point (Body.originPoint b))
+
+                _ ->
+                    True
+        )
+        (World.bodies world)
 
 
 simulateWithEvents : Int -> Time.Posix -> World Data -> List ( Time.Posix, ShotEvent ) -> ( World Data, List ( Time.Posix, ShotEvent ) )
