@@ -356,25 +356,27 @@ update msg model =
 
                 Simulating events pool ->
                     if ballsStoppedMoving newModel.world then
-                        { newModel
-                            | state =
-                                case EightBall.playerShot (List.reverse events) pool of
-                                    PlayersFault newPool ->
-                                        PlacingBallInHand newPool
+                        case EightBall.playerShot (List.reverse events) pool of
+                            PlayersFault newPool ->
+                                { newModel
+                                    | state = PlacingBallInHand newPool
+                                    , focalPoint = Point3d.origin
+                                }
 
-                                    NextShot newPool ->
-                                        Playing newPool
+                            NextShot newPool ->
+                                { newModel
+                                    | state = Playing newPool
+                                    , hitRelativeAzimuth = Angle.degrees 0
+                                    , hitElevation = Angle.degrees 0
+                                    , focalPoint = cuePosition newModel.world
+                                    , cueElevation = Angle.degrees 5
+                                }
 
-                                    GameOver _ _ ->
-                                        Debug.todo "AwaitingNewGame"
+                            GameOver _ _ ->
+                                Debug.todo "AwaitingNewGame"
 
-                                    Error _ ->
-                                        Debug.todo "Error"
-                            , hitRelativeAzimuth = Angle.degrees 0
-                            , hitElevation = Angle.degrees 0
-                            , focalPoint = cuePosition newModel.world
-                            , cueElevation = Angle.degrees 5
-                        }
+                            Error _ ->
+                                Debug.todo "Error"
 
                     else
                         let
@@ -409,8 +411,7 @@ update msg model =
                             if canSpawnHere position model.world then
                                 { model
                                     | focalPoint = position
-
-                                    -- , state = Playing (EightBall.ballPlacedBehindHeadString model.time pool)
+                                    , state = Playing (EightBall.ballPlacedInHand model.time pool)
                                     , world =
                                         World.update
                                             (\b ->
