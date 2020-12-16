@@ -301,14 +301,21 @@ type CurrentTarget
 
 
 currentTarget : Pool state -> CurrentTarget
-currentTarget (Pool poolData) =
+currentTarget (Pool ({ pocketed } as poolData)) =
     case poolData.target of
         Open ->
             OpenTable
 
         Grouped { solids } ->
             if solids == poolData.player then
-                Solids
+                if pocketedIn SolidGroup pocketed == 7 then
+                    EightBall
+
+                else
+                    Solids
+
+            else if pocketedIn SolidGroup pocketed == 7 then
+                EightBall
 
             else
                 Stripes
@@ -367,12 +374,12 @@ type InternalEvent
       --       -- Player actions
       --       -- | CallShot Ball Pocket
       --       -- | PlaceBallInHand
+    | GameOver_
     | Shot (List ( Time.Posix, ShotEvent ))
 
 
 type ShotEvent
-    = -- CueStruck -- Without a CueStruck event, it's not possible to "replay" events.
-      --       -- | BallOffTable Ball
+    = --       -- | BallOffTable Ball
       --       -- | BallToBall Ball Ball (List Ball)
       --       -- | BallToWall Ball Wall
       BallToPocket Ball --Pocket
@@ -445,6 +452,25 @@ type WhatHappened
     | Error String
 
 
+{-| Set game over via this function so we don't forget to add the internal event.
+-}
+gameOver : Player -> PoolData -> WhatHappened
+gameOver winner poolData =
+    GameOver
+        (Pool
+            { poolData
+                | events =
+                    poolData.events
+                        ++ [ { event = GameOver_
+                             , when = lastEventTime poolData.events
+                             }
+                           ]
+            }
+        )
+        { winner = playerToInt winner
+        }
+
+
 {-| Send a series of shot events.
 
 Note: if no balls are hit by the cue ball, send an empty list.
@@ -495,9 +521,14 @@ playerShot shotEvents (Pool data) =
                                 ballPocketedEvents
                                 data
                     }
+
+                previousTarget =
+                    -- This gets the currentTarget on the _old_ `data`.
+                    currentTarget (Pool data)
             in
             checkShot shotEvents
                 ballPocketedEvents
+                previousTarget
                 newPoolData
 
 
@@ -658,16 +689,33 @@ isValidHit shotEvents poolData =
     True
 
 
-checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> PoolData -> WhatHappened
-checkShot shotEvents ballPocketedEvents poolData =
+checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> CurrentTarget -> PoolData -> WhatHappened
+checkShot shotEvents ballPocketedEvents previousTarget poolData =
     if ballPocketedEvents.eightBallPocketed then
-        Debug.todo "Handle game over."
+        case currentTarget (Pool poolData) of
+            EightBall ->
+                -- TODO: Combine case into tuple with new type `Scratched | NotScratched`.
+                let
+                    winningPlayer =
+                        if ballPocketedEvents.scratched then
+                            switchPlayer poolData.player
+
+                        else
+                            poolData.player
+                in
+                gameOver winningPlayer poolData
+
+            _ ->
+                -- If the player wasn't targeting the 8-ball, then they lose!
+                gameOver (switchPlayer poolData.player) poolData
 
     else if ballPocketedEvents.scratched then
         PlayersFault
             (Pool
                 { poolData
                     | player = switchPlayer poolData.player
+
+                    -- TODO: Log Scratched internal event.
                 }
             )
 
@@ -675,14 +723,17 @@ checkShot shotEvents ballPocketedEvents poolData =
         NextShot <|
             Pool
                 { poolData
-                    | player = checkNextPlayer ballPocketedEvents poolData
+                    | player =
+                        checkNextPlayer ballPocketedEvents
+                            previousTarget
+                            poolData
                 }
 
 
 {-| Check who should be the next player.
 -}
-checkNextPlayer : BallPocketedEvents -> PoolData -> Player
-checkNextPlayer ({ allPocketedBalls, eightBallPocketed, solidsPocketed, stripesPocketed, scratched } as ballPocketedEvents) poolData =
+checkNextPlayer : BallPocketedEvents -> CurrentTarget -> PoolData -> Player
+checkNextPlayer ({ allPocketedBalls, eightBallPocketed, solidsPocketed, stripesPocketed, scratched } as ballPocketedEvents) previousTarget poolData =
     if scratched then
         switchPlayer poolData.player
 
@@ -690,7 +741,7 @@ checkNextPlayer ({ allPocketedBalls, eightBallPocketed, solidsPocketed, stripesP
         switchPlayer poolData.player
 
     else
-        case currentTarget (Pool poolData) of
+        case previousTarget of
             OpenTable ->
                 if pocketedInSameGroup ballPocketedEvents then
                     poolData.player
@@ -699,14 +750,14 @@ checkNextPlayer ({ allPocketedBalls, eightBallPocketed, solidsPocketed, stripesP
                     switchPlayer poolData.player
 
             Solids ->
-                if List.all (ballPocketedInGroup SolidGroup) allPocketedBalls then
+                if List.length solidsPocketed > 0 then
                     poolData.player
 
                 else
                     switchPlayer poolData.player
 
             Stripes ->
-                if List.all (ballPocketedInGroup StripeGroup) allPocketedBalls then
+                if List.length stripesPocketed > 0 then
                     poolData.player
 
                 else
@@ -764,6 +815,9 @@ lastEventTimeByEventType eventData =
             Just eventData.when
 
         BallPlacedBehindHeadString ->
+            Just eventData.when
+
+        GameOver_ ->
             Just eventData.when
 
 
