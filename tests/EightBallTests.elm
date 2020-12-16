@@ -389,6 +389,60 @@ suite =
                                     "Should be EightBall.GameOver, but found this instead:\n"
                                         ++ Debug.toString other
                     )
+                , test "after player finishes all of their target, then hits 8-ball but scratches, they lose :("
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                                    -- Player 2
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 2) EightBall.twoBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 5) EightBall.threeBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 6) EightBall.fourBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 7) EightBall.fiveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 8) EightBall.sixBall
+                                        ]
+                                    -- Player 2 misses
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 10) EightBall.oneBall
+                                        ]
+                                    -- Player 1 shoots again
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 111) EightBall.nineBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 115) EightBall.nineBall
+                                        ]
+                                    -- Player 1 misses
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1200) EightBall.tenBall
+                                        ]
+                                    -- Player 2 finishes off target group
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1205) EightBall.sevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1500) EightBall.sevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1500) EightBall.oneBall
+                                        ]
+                                    -- Player 2 makes 8-ball, but then scratches
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1600) EightBall.eightBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1800) EightBall.eightBall
+                                        , EightBall.scratch (Time.millisToPosix 1700)
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.GameOver pool { winner } ->
+                                Expect.equal winner 0
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.GameOver, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
                 , test "after player shoots the 8-ball early (before they have finished all of their target balls), they lose :("
                     (\_ ->
                         let
