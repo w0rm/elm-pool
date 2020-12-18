@@ -507,7 +507,9 @@ update msg model =
                             Vector2d.toPixels (Vector2d.from from mouse)
 
                         cameraAzimuth =
-                            model.cameraAzimuth |> Quantity.minus (Angle.degrees x)
+                            model.cameraAzimuth
+                                |> Quantity.minus (Angle.degrees x)
+                                |> Angle.normalize
 
                         cameraElevation =
                             model.cameraElevation
@@ -530,7 +532,7 @@ update msg model =
                         cueElevation =
                             model.cueElevation
                                 |> Quantity.minus (Angle.degrees y)
-                                |> Quantity.clamp (Angle.degrees -90) (Angle.degrees 90)
+                                |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
                     in
                     { model
                         | mouseAction = SettingCueElevation mouse
