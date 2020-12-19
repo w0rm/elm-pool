@@ -507,7 +507,9 @@ update msg model =
                             Vector2d.toPixels (Vector2d.from from mouse)
 
                         cameraAzimuth =
-                            model.cameraAzimuth |> Quantity.minus (Angle.degrees x)
+                            model.cameraAzimuth
+                                |> Quantity.minus (Angle.degrees x)
+                                |> Angle.normalize
 
                         cameraElevation =
                             model.cameraElevation
@@ -530,7 +532,7 @@ update msg model =
                         cueElevation =
                             model.cueElevation
                                 |> Quantity.minus (Angle.degrees y)
-                                |> Quantity.clamp (Angle.degrees -90) (Angle.degrees 90)
+                                |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
                     in
                     { model
                         | mouseAction = SettingCueElevation mouse
@@ -618,13 +620,13 @@ simulateWithEvents : Int -> Time.Posix -> World Data -> List ( Time.Posix, ShotE
 simulateWithEvents frame time world events =
     if frame > 0 then
         let
-            newWorld =
+            simulatedWorld =
                 -- Simulate at shorter interval to prevent tunneling
                 World.simulate (seconds (1 / 120)) world
 
-            newEvents =
+            ( newEvents, newWorld ) =
                 List.foldl
-                    (\contact currentEvents ->
+                    (\contact ( currentEvents, currentWorld ) ->
                         let
                             ( b1, b2 ) =
                                 Contact.bodies contact
@@ -632,34 +634,38 @@ simulateWithEvents frame time world events =
                         case ( (Body.data b1).id, (Body.data b2).id ) of
                             -- TODO: check collisions with pockets instead when we have them
                             ( Numbered ball, Floor ) ->
-                                EightBall.ballFellInPocket time ball :: currentEvents
+                                ( EightBall.ballFellInPocket time ball :: currentEvents
+                                , World.keepIf (\b -> (Body.data b).id /= Numbered ball) currentWorld
+                                )
 
                             ( Floor, Numbered ball ) ->
-                                EightBall.ballFellInPocket time ball :: currentEvents
+                                ( EightBall.ballFellInPocket time ball :: currentEvents
+                                , World.keepIf (\b -> (Body.data b).id /= Numbered ball) currentWorld
+                                )
 
                             ( CueBall, Numbered ball ) ->
-                                EightBall.cueHitBall time ball :: currentEvents
+                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
 
                             ( Numbered ball, CueBall ) ->
-                                EightBall.cueHitBall time ball :: currentEvents
+                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
 
                             ( CueBall, Floor ) ->
-                                EightBall.scratch time :: currentEvents
+                                ( EightBall.scratch time :: currentEvents, currentWorld )
 
                             ( Floor, CueBall ) ->
-                                EightBall.scratch time :: currentEvents
+                                ( EightBall.scratch time :: currentEvents, currentWorld )
 
                             --(Numbered _, Numbered _) ->
-                            --    EightBall.twoBallsCollided time
+                            --    (EightBall.twoBallsCollided time, currentWorld)
                             --( Walls, Numbered _ ) ->
-                            --    EightBall.ballTouchedTheWall time
+                            --    (EightBall.ballTouchedTheWall time, currentWorld)
                             --( Numbered _, Walls ) ->
-                            --    EightBall.ballTouchedTheWall time
+                            --    (EightBall.ballTouchedTheWall time, currentWorld)
                             _ ->
-                                currentEvents
+                                ( currentEvents, currentWorld )
                     )
-                    events
-                    (World.contacts newWorld)
+                    ( events, simulatedWorld )
+                    (World.contacts simulatedWorld)
         in
         simulateWithEvents (frame - 1) time newWorld newEvents
 
