@@ -245,6 +245,7 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
             , background = Scene3d.backgroundColor Color.black
             , toneMapping = Scene3d.noToneMapping
             }
+        , viewCurrentStatus model.state
         ]
 
 
@@ -292,6 +293,118 @@ cueEntity model =
 
         Nothing ->
             Scene3d.nothing
+
+
+
+-- View Current Status
+
+
+viewCurrentStatus : State -> Html Msg
+viewCurrentStatus state =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "bottom" "0"
+        , Html.Attributes.style "left" "50%" -- To center absolute content.
+        ]
+        [ Html.node "style"
+            []
+            [ Html.text """
+@font-face {
+    font-family: 'Teko';
+    src: url('assets/Teko-Medium.woff2') format('woff2'),
+        url('assets/Teko-Medium.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+"""
+            ]
+        , Html.div
+            [ -- To center within absolute container.
+              Html.Attributes.style "position" "relative"
+            , Html.Attributes.style "left" "-50%"
+
+            -- Color
+            , Html.Attributes.style "background-color" "#121517"
+            , Html.Attributes.style "color" "#eef"
+
+            -- Border/Edges
+            , Html.Attributes.style "border-radius" "10px 10px 0 0"
+            , Html.Attributes.style "box-shadow" "0 4px 12px 0 rgba(0, 0, 0, 0.15)"
+
+            -- Font
+            , Html.Attributes.style "font-family" "Teko"
+            , Html.Attributes.style "font-size" "40px"
+
+            -- Other
+            , Html.Attributes.style "opacity" "0.9"
+            , Html.Attributes.style "padding" "15px 25px 10px 25px"
+            ]
+            [ Html.text (currentPlayer state)
+            , Html.text " - "
+            , Html.text (currentTarget state)
+            ]
+        ]
+
+
+currentPlayer : State -> String
+currentPlayer state =
+    let
+        playerIndex =
+            case state of
+                PlacingBehindHeadString pool ->
+                    EightBall.currentPlayer pool
+
+                Playing pool ->
+                    EightBall.currentPlayer pool
+
+                Simulating shotEventPosixTimeList pool ->
+                    EightBall.currentPlayer pool
+
+                PlacingBallInHand pool ->
+                    EightBall.currentPlayer pool
+    in
+    case playerIndex of
+        0 ->
+            "Player 1"
+
+        1 ->
+            "Player 2"
+
+        _ ->
+            "Unknown"
+
+
+currentTarget : State -> String
+currentTarget state =
+    let
+        currentTarget_ : EightBall.CurrentTarget
+        currentTarget_ =
+            case state of
+                PlacingBehindHeadString pool ->
+                    EightBall.currentTarget pool
+
+                Playing pool ->
+                    EightBall.currentTarget pool
+
+                Simulating shotEventPosixTimeList pool ->
+                    EightBall.currentTarget pool
+
+                PlacingBallInHand pool ->
+                    EightBall.currentTarget pool
+    in
+    case currentTarget_ of
+        EightBall.OpenTable ->
+            "Open Table"
+
+        EightBall.Solids ->
+            "Solids"
+
+        EightBall.Stripes ->
+            "Stripes"
+
+        EightBall.EightBall ->
+            "8-Ball"
 
 
 subscriptions : Model -> Sub Msg
