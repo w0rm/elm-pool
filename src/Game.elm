@@ -479,10 +479,7 @@ update msg model =
                             NextShot newPool ->
                                 { newModel
                                     | state = Playing newPool
-                                    , hitRelativeAzimuth = Angle.degrees 0
-                                    , hitElevation = Angle.degrees 0
                                     , focalPoint = cuePosition newModel.world
-                                    , cueElevation = Angle.degrees 5
                                 }
 
                             GameOver _ _ ->
@@ -687,7 +684,10 @@ update msg model =
                 ( Pressed _, Playing pool ) ->
                     { model
                         | state = Simulating [] pool
+                        , hitRelativeAzimuth = Angle.degrees 0
+                        , hitElevation = Angle.degrees 0
                         , focalPoint = Point3d.origin
+                        , cueElevation = Angle.degrees 5
                         , world =
                             World.update
                                 (\b ->
