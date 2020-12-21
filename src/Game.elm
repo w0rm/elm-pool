@@ -45,7 +45,9 @@ type ScreenCoordinates
 
 
 type alias Model =
-    { world : World Data
+    { world :
+        () -- "Hide" world behind function for Elm debugger. See https://github.com/w0rm/elm-pool/issues/8.
+        -> World Data
     , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
     , distance : Length
     , focalPoint : Point3d Meters WorldCoordinates
@@ -102,7 +104,7 @@ initial ballTextures roughnessTexture ( width, height ) =
             -- TODO: consider getting the initial time
             Time.millisToPosix 0
     in
-    { world = world
+    { world = always world
     , time = time
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
@@ -191,14 +193,14 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
         bodies =
             case model.state of
                 PlacingBehindHeadString _ ->
-                    World.bodies world
+                    World.bodies (world ())
                         |> List.filter
                             (\b ->
                                 (Body.data b).id /= CueBall
                             )
 
                 _ ->
-                    World.bodies world
+                    World.bodies (world ())
 
         entities =
             List.map
@@ -260,7 +262,7 @@ cueAxis { cameraAzimuth, hitRelativeAzimuth, cueElevation, hitElevation, world }
             Direction3d.xyZ hitAzimuth hitElevation
 
         point =
-            cuePosition world
+            cuePosition (world ())
                 |> Point3d.translateIn pointDirection (Length.millimeters (57.15 / 2))
 
         axisDirection =
@@ -448,6 +450,9 @@ update msg model =
             let
                 newModel =
                     { model | time = time }
+
+                oldWorld =
+                    model.world ()
             in
             case newModel.state of
                 PlacingBallInHand _ ->
@@ -468,7 +473,7 @@ update msg model =
                     }
 
                 Simulating events pool ->
-                    if ballsStoppedMoving newModel.world then
+                    if ballsStoppedMoving oldWorld then
                         case EightBall.playerShot (List.reverse events) pool of
                             PlayersFault newPool ->
                                 { newModel
@@ -479,7 +484,7 @@ update msg model =
                             NextShot newPool ->
                                 { newModel
                                     | state = Playing newPool
-                                    , focalPoint = cuePosition newModel.world
+                                    , focalPoint = cuePosition oldWorld
                                 }
 
                             GameOver _ _ ->
@@ -491,11 +496,11 @@ update msg model =
                     else
                         let
                             ( newWorld, newEvents ) =
-                                simulateWithEvents 2 time newModel.world events
+                                simulateWithEvents 2 time oldWorld events
                         in
                         { newModel
                             | state = Simulating newEvents pool
-                            , world = newWorld
+                            , world = always newWorld
                         }
 
         Resize width height ->
@@ -510,6 +515,10 @@ update msg model =
             }
 
         MouseDown mouse ->
+            let
+                world =
+                    model.world ()
+            in
             case model.state of
                 PlacingBallInHand pool ->
                     case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBallInHand of
@@ -518,7 +527,7 @@ update msg model =
                                 position =
                                     Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
                             in
-                            if canSpawnHere position model.world then
+                            if canSpawnHere position world then
                                 { model
                                     | focalPoint = position
                                     , state = Playing (EightBall.ballPlacedInHand model.time pool)
@@ -531,7 +540,8 @@ update msg model =
                                                 else
                                                     b
                                             )
-                                            model.world
+                                            world
+                                            |> always
                                 }
 
                             else
@@ -559,14 +569,15 @@ update msg model =
                                             else
                                                 b
                                         )
-                                        model.world
+                                        world
+                                        |> always
                             }
 
                         Nothing ->
                             { model | mouseAction = Orbiting mouse }
 
                 Playing _ ->
-                    case World.raycast (ray model mouse) model.world of
+                    case World.raycast (ray model mouse) world of
                         Just raycastResult ->
                             case (Body.data raycastResult.body).id of
                                 CueBall ->
@@ -652,7 +663,7 @@ update msg model =
                 _ ->
                     case model.state of
                         Playing _ ->
-                            case World.raycast (ray model mouse) model.world of
+                            case World.raycast (ray model mouse) (model.world ()) of
                                 Just raycastResult ->
                                     case (Body.data raycastResult.body).id of
                                         CueBall ->
@@ -706,7 +717,8 @@ update msg model =
                                     else
                                         b
                                 )
-                                model.world
+                                (model.world ())
+                                |> always
                         , mouseAction = Still
                     }
 
