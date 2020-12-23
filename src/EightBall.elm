@@ -314,7 +314,7 @@ currentTarget (Pool ({ pocketed } as poolData)) =
                 else
                     Solids
 
-            else if pocketedIn SolidGroup pocketed == 7 then
+            else if pocketedIn StripeGroup pocketed == 7 then
                 EightBall
 
             else
