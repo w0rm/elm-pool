@@ -295,6 +295,93 @@ suite =
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal 0
+                                        , EightBall.currentTarget >> Expect.equal EightBall.EightBall
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "after player shoots cue and pockets all of their solid balls, then on the next shot targeting the 8-ball, it's still their shot!"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.twoBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.threeBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.fourBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.fiveBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.sixBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.sevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.sevenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        , EightBall.currentTarget >> Expect.equal EightBall.EightBall
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.NextShot, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "after player shoots cue and pockets all of their striped balls, then on the next shot targeting the 8-ball, it's still their shot!"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.nineBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.nineBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fifteenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.fifteenBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.tenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.tenBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.elevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.elevenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.twelveBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.thirteenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.thirteenBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fourteenBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.fourteenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        , EightBall.currentTarget >> Expect.equal EightBall.EightBall
                                         ]
 
                             other ->
