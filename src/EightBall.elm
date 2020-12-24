@@ -1,7 +1,7 @@
 module EightBall exposing
     ( Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
-    , CurrentTarget(..)
-    , currentPlayer, currentScore, currentTarget
+    , currentPlayer, currentScore
+    , CurrentTarget(..), currentTarget
     , rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
     , ShotEvent
     , cueHitBall, ballFellInPocket, scratch
@@ -28,9 +28,9 @@ module EightBall exposing
 
 # View
 
-@docs CurrentTarget
+@docs currentPlayer, currentScore
 
-@docs currentPlayer, currentScore, currentTarget
+@docs CurrentTarget, currentTarget
 
 
 # Update
@@ -38,7 +38,7 @@ module EightBall exposing
 @docs rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
 
 
-## Events
+## Shot Events
 
 @docs ShotEvent
 @docs cueHitBall, ballFellInPocket, scratch
@@ -132,80 +132,112 @@ switchPlayer player =
 -- Ball
 
 
+{-| A numbered ball.
+-}
 type Ball
     = Ball Int BallGroup
 
 
+{-| Create a ball.
+-}
 oneBall : Ball
 oneBall =
     Ball 1 SolidGroup
 
 
+{-| Create a ball.
+-}
 twoBall : Ball
 twoBall =
     Ball 2 SolidGroup
 
 
+{-| Create a ball.
+-}
 threeBall : Ball
 threeBall =
     Ball 3 SolidGroup
 
 
+{-| Create a ball.
+-}
 fourBall : Ball
 fourBall =
     Ball 4 SolidGroup
 
 
+{-| Create a ball.
+-}
 fiveBall : Ball
 fiveBall =
     Ball 5 SolidGroup
 
 
+{-| Create a ball.
+-}
 sixBall : Ball
 sixBall =
     Ball 6 SolidGroup
 
 
+{-| Create a ball.
+-}
 sevenBall : Ball
 sevenBall =
     Ball 7 SolidGroup
 
 
+{-| Create a ball.
+-}
 eightBall : Ball
 eightBall =
     Ball 8 EightGroup
 
 
+{-| Create a ball.
+-}
 nineBall : Ball
 nineBall =
     Ball 9 StripeGroup
 
 
+{-| Create a ball.
+-}
 tenBall : Ball
 tenBall =
     Ball 10 StripeGroup
 
 
+{-| Create a ball.
+-}
 elevenBall : Ball
 elevenBall =
     Ball 11 StripeGroup
 
 
+{-| Create a ball.
+-}
 twelveBall : Ball
 twelveBall =
     Ball 12 StripeGroup
 
 
+{-| Create a ball.
+-}
 thirteenBall : Ball
 thirteenBall =
     Ball 13 StripeGroup
 
 
+{-| Create a ball.
+-}
 fourteenBall : Ball
 fourteenBall =
     Ball 14 StripeGroup
 
 
+{-| Create a ball.
+-}
 fifteenBall : Ball
 fifteenBall =
     Ball 15 StripeGroup
@@ -293,6 +325,8 @@ currentScore (Pool ({ player, pocketed, target } as poolData)) =
                     }
 
 
+{-| The current target.
+-}
 type CurrentTarget
     = OpenTable
     | Solids
@@ -300,6 +334,14 @@ type CurrentTarget
     | EightBall
 
 
+{-| Get the current target based on the current player and pocketed balls in the game.
+
+1.  Open table - when the player may shoot at either solids or stripes, attempting to pocket a ball of either set.
+2.  Solids - the current player must shoot at solids, pocketing at least one of them without scratching in order to keep shooting.
+3.  Stripes - the current player must shoot at stripes, pocketing at least one of them without scratching in order to keep shooting.
+4.  8-ball - the player must shoot at the 8-ball. If it is pocketed without a foul or scratch, the player wins.
+
+-}
 currentTarget : Pool state -> CurrentTarget
 currentTarget (Pool ({ pocketed } as poolData)) =
     case poolData.target of
@@ -325,14 +367,23 @@ currentTarget (Pool ({ pocketed } as poolData)) =
 -- Update
 
 
+{-| Waiting for the balls to be racked.
+-}
 type AwaitingRack
     = AwaitingRack
 
 
+{-| Ready for a player to take another shot.
+-}
 type AwaitingNextShot
     = AwaitingNextShot
 
 
+{-| When a player scratches, or otherwise fouls, during regular play, the next player is given ball-in-hand anywhere on the table.
+
+See [WPA rules](https://wpapool.com/rules-of-play/) 1.5 Cue Ball in Hand for more info.
+
+-}
 type AwaitingBallInHand
     = AwaitingBallInHand
 
@@ -351,10 +402,14 @@ type AwaitingPlaceBallBehindHeadstring
     = AwaitingPlaceBallBehindHeadstring
 
 
+{-| When the game is over, start a new game to play again.
+-}
 type AwaitingNewGame
     = AwaitingNewGame
 
 
+{-| The balls must be racked before the player can place the cue ball and break.
+-}
 rack : Time.Posix -> Pool AwaitingRack -> Pool AwaitingPlaceBallBehindHeadstring
 rack when (Pool data) =
     Pool
@@ -379,6 +434,15 @@ type InternalEvent
     | GameOver_
 
 
+{-| All potential shot events available.
+
+There are a few which should be supported, but are not yet:
+
+  - BallOffTable
+  - BallToBall
+  - BallToWall
+
+-}
 type ShotEvent
     = --       -- | BallOffTable Ball
       --       -- | BallToBall Ball Ball (List Ball)
@@ -388,6 +452,8 @@ type ShotEvent
     | Scratch
 
 
+{-| When the ball is placed behind the head string after racking.
+-}
 ballPlacedBehindHeadString : Time.Posix -> Pool AwaitingPlaceBallBehindHeadstring -> Pool AwaitingNextShot
 ballPlacedBehindHeadString when (Pool data) =
     Pool
@@ -401,6 +467,8 @@ ballPlacedBehindHeadString when (Pool data) =
         }
 
 
+{-| When the ball is placed anywhere on the table.
+-}
 ballPlacedInHand : Time.Posix -> Pool AwaitingBallInHand -> Pool AwaitingNextShot
 ballPlacedInHand when (Pool data) =
     Pool
@@ -418,6 +486,11 @@ type Event
     = Event EventData
 
 
+{-| When the cue ball comes into contact with a numbered ball.
+
+Note: once they are touching, there's no need to send this event again unless they are separated and come back into contact.
+
+-}
 cueHitBall : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
 cueHitBall when ball =
     ( when
@@ -435,6 +508,8 @@ ballTouchedTheWall =
     Debug.todo ""
 
 
+{-| When a numbered ball is pocketed.
+-}
 ballFellInPocket : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
 ballFellInPocket when ball =
     ( when
@@ -458,6 +533,14 @@ scratch when =
 -- Ruling
 
 
+{-| After a player shoots, this returns the outcome.
+
+  - PlayersFault - when a player scratches (or, in the future, hits the wrong ball first). The next player must place the ball in hand.
+  - NextShot - waiting for a player to shoot. Use `currentPlayer` to figure out which player is shooting. Use `playerShot` after the player shoots.
+  - GameOver - when the game is over, this returns the winner.
+  - Error - when something unexpected happens, like a ball pocketed twice.
+
+-}
 type WhatHappened
     = PlayersFault (Pool AwaitingBallInHand)
     | NextShot (Pool AwaitingNextShot)
@@ -668,8 +751,8 @@ updatePocketed ballPocketedEvents poolData =
                                 Nothing
                     )
     in
-    List.append poolData.pocketed
-        newPocketedBalls
+    poolData.pocketed
+        ++ newPocketedBalls
 
 
 type BallGroup
