@@ -11,7 +11,7 @@ import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
-import EightBall exposing (AwaitingBallInHand, AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
+import EightBall exposing (AwaitingBallInHand, AwaitingNewGame, AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Geometry
 import Html exposing (Html)
@@ -46,6 +46,8 @@ type ScreenCoordinates
 
 type alias Model =
     { world : World Data
+    , ballTextures : Dict Int (Material.Texture Color)
+    , roughnessTexture : Material.Texture Float
     , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
     , distance : Length
     , focalPoint : Point3d Meters WorldCoordinates
@@ -78,6 +80,7 @@ type State
     | Playing (Pool AwaitingNextShot)
     | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingNextShot)
     | PlacingBallInHand (Pool AwaitingBallInHand)
+    | GameOver (EightBall.Pool AwaitingNewGame) Int
 
 
 type Msg
@@ -89,6 +92,7 @@ type Msg
     | MouseMove (Point2d Pixels ScreenCoordinates)
     | ShootButtonDown
     | ShootButtonUp
+    | StartNewGameButtonClicked
 
 
 initial : Dict Int (Material.Texture Color) -> Material.Texture Float -> ( Float, Float ) -> Model
@@ -103,6 +107,8 @@ initial ballTextures roughnessTexture ( width, height ) =
             Time.millisToPosix 0
     in
     { world = world
+    , ballTextures = ballTextures
+    , roughnessTexture = roughnessTexture
     , time = time
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
@@ -319,30 +325,59 @@ viewCurrentStatus state =
 }
 """
             ]
+        , case state of
+            GameOver _ _ ->
+                viewGameOver state
+
+            _ ->
+                Html.div statusStyle
+                    [ Html.text (currentPlayer state)
+                    , Html.text " - "
+                    , Html.text (currentTarget state)
+                    ]
+        ]
+
+
+statusStyle : List (Html.Attribute Msg)
+statusStyle =
+    [ -- To center within absolute container.
+      Html.Attributes.style "position" "relative"
+    , Html.Attributes.style "left" "-50%"
+    , Html.Attributes.style "text-align" "center"
+
+    -- Color
+    , Html.Attributes.style "background-color" "#121517"
+    , Html.Attributes.style "color" "#eef"
+
+    -- Border/Edges
+    , Html.Attributes.style "border-radius" "10px 10px 0 0"
+    , Html.Attributes.style "box-shadow" "0 4px 12px 0 rgba(0, 0, 0, 0.15)"
+
+    -- Font
+    , Html.Attributes.style "font-family" "Teko"
+    , Html.Attributes.style "font-size" "40px"
+
+    -- Other
+    , Html.Attributes.style "opacity" "0.9"
+    , Html.Attributes.style "padding" "15px 25px 10px 25px"
+    ]
+
+
+viewGameOver : State -> Html Msg
+viewGameOver state =
+    Html.button
+        (statusStyle
+            ++ [ Html.Attributes.style "border" "none"
+               , Html.Attributes.style "cursor" "pointer"
+               , Html.Events.onClick StartNewGameButtonClicked
+               ]
+        )
+        [ Html.text (currentPlayer state)
+        , Html.text " won!"
         , Html.div
-            [ -- To center within absolute container.
-              Html.Attributes.style "position" "relative"
-            , Html.Attributes.style "left" "-50%"
-
-            -- Color
-            , Html.Attributes.style "background-color" "#121517"
-            , Html.Attributes.style "color" "#eef"
-
-            -- Border/Edges
-            , Html.Attributes.style "border-radius" "10px 10px 0 0"
-            , Html.Attributes.style "box-shadow" "0 4px 12px 0 rgba(0, 0, 0, 0.15)"
-
-            -- Font
-            , Html.Attributes.style "font-family" "Teko"
-            , Html.Attributes.style "font-size" "40px"
-
-            -- Other
-            , Html.Attributes.style "opacity" "0.9"
-            , Html.Attributes.style "padding" "15px 25px 10px 25px"
+            [ Html.Attributes.style "color" "rgba(86, 186, 79, 0.7)"
             ]
-            [ Html.text (currentPlayer state)
-            , Html.text " - "
-            , Html.text (currentTarget state)
+            [ Html.text "Play again?"
             ]
         ]
 
@@ -363,6 +398,9 @@ currentPlayer state =
 
                 PlacingBallInHand pool ->
                     EightBall.currentPlayer pool
+
+                GameOver pool winner ->
+                    winner
     in
     case playerIndex of
         0 ->
@@ -391,6 +429,9 @@ currentTarget state =
                     EightBall.currentTarget pool
 
                 PlacingBallInHand pool ->
+                    EightBall.currentTarget pool
+
+                GameOver pool _ ->
                     EightBall.currentTarget pool
     in
     case currentTarget_ of
@@ -482,8 +523,10 @@ update msg model =
                                     , focalPoint = cuePosition newModel.world
                                 }
 
-                            GameOver _ _ ->
-                                Debug.todo "AwaitingNewGame"
+                            EightBall.GameOver newPool { winner } ->
+                                { newModel
+                                    | state = GameOver newPool winner
+                                }
 
                             Error _ ->
                                 Debug.todo "Error"
@@ -497,6 +540,9 @@ update msg model =
                             | state = Simulating newEvents pool
                             , world = newWorld
                         }
+
+                GameOver _ _ ->
+                    newModel
 
         Resize width height ->
             { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
@@ -609,6 +655,9 @@ update msg model =
                 Simulating _ _ ->
                     { model | mouseAction = Orbiting mouse }
 
+                GameOver _ _ ->
+                    model
+
         MouseMove mouse ->
             case model.mouseAction of
                 Orbiting from ->
@@ -712,6 +761,14 @@ update msg model =
 
                 _ ->
                     model
+
+        StartNewGameButtonClicked ->
+            initial model.ballTextures
+                model.roughnessTexture
+                (Tuple.mapBoth Quantity.unwrap
+                    Quantity.unwrap
+                    model.dimensions
+                )
 
 
 canSpawnHere : Point3d Meters WorldCoordinates -> World Data -> Bool
