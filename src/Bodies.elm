@@ -1,20 +1,17 @@
 module Bodies exposing
-    ( Data
-    , Id(..)
+    ( Id(..)
     , areaBallInHand
     , areaBallInHandEntity
     , areaBehindTheHeadString
     , areaBehindTheHeadStringEntity
-    , balls
-    , cueBall
-    , floor
-    , tableSurface
-    , tableWalls
+    , bodyToEntity
+    , world
     )
 
+import Acceleration
 import Angle
 import Axis3d
-import Block3d
+import Block3d exposing (Block3d)
 import Color exposing (Color)
 import Dict exposing (Dict)
 import Direction3d
@@ -25,6 +22,7 @@ import Physics.Body as Body exposing (Body)
 import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
 import Physics.Material exposing (Material)
 import Physics.Shape
+import Physics.World as World exposing (World)
 import Point2d
 import Point3d
 import Quantity exposing (Quantity(..))
@@ -43,12 +41,6 @@ type Id
     | CueBall
     | Table
     | Walls
-
-
-type alias Data =
-    { entity : Entity BodyCoordinates
-    , id : Id
-    }
 
 
 areaBallInHand : Rectangle3d Meters WorldCoordinates
@@ -123,6 +115,19 @@ areaBehindTheHeadStringEntity =
             Scene3d.nothing
 
 
+world : World Id
+world =
+    World.empty
+        |> World.withGravity
+            (Acceleration.metersPerSecondSquared 9.80665)
+            Direction3d.negativeZ
+        |> World.add tableSurface
+        |> World.add tableWalls
+        |> World.add floor
+        |> World.add cueBall
+        |> (\w -> List.foldl World.add w balls)
+
+
 radius : Float
 radius =
     57.15 / 2
@@ -135,8 +140,8 @@ ballSphere =
         (millimeters radius)
 
 
-balls : Material.Texture Float -> Dict Int (Material.Texture Color) -> List (Body Data)
-balls roughnessTexture ballTextures =
+balls : List (Body Id)
+balls =
     let
         numbers =
             [ 1, 10, 4, 2, 8, 5, 9, 3, 14, 15, 11, 12, 6, 13, 7 ]
@@ -161,32 +166,12 @@ balls roughnessTexture ballTextures =
 
                 y =
                     (toFloat row - lastRow / 2) * distance
-
-                colorTexture =
-                    Dict.get number ballTextures
-                        |> Maybe.withDefault (Material.constant (Color.rgb255 0 0 0))
-
-                material =
-                    Material.texturedPbr
-                        { baseColor = colorTexture
-                        , roughness = roughnessTexture
-                        , metallic = Material.constant 0
-                        }
             in
             Body.sphere ballSphere
-                { id =
-                    EightBall.numberedBall number
-                        |> Maybe.map Numbered
-                        |> Maybe.withDefault CueBall
-                , entity =
-                    Scene3d.sphereWithShadow
-                        material
-                        ballSphere
-                        -- rotate to see the numbers
-                        |> Scene3d.rotateAround
-                            (Axis3d.through (Sphere3d.centerPoint ballSphere) Direction3d.x)
-                            (Angle.degrees 90)
-                }
+                (EightBall.numberedBall number
+                    |> Maybe.map Numbered
+                    |> Maybe.withDefault CueBall
+                )
                 |> Body.withMaterial ballMaterial
                 |> Body.withDamping ballDamping
                 |> Body.withBehavior (Body.dynamic (Mass.grams 170))
@@ -195,15 +180,84 @@ balls roughnessTexture ballTextures =
         numbers
 
 
-cueBall : Body Data
+bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Body Id -> Entity WorldCoordinates
+bodyToEntity roughnessTexture ballTextures body =
+    let
+        id =
+            Body.data body
+
+        frame =
+            Body.frame body
+
+        entity =
+            case id of
+                Floor ->
+                    Scene3d.quad
+                        (Material.matte (Color.rgb255 46 52 54))
+                        (Point3d.meters -sizes.floorHalfSize -sizes.floorHalfSize 0)
+                        (Point3d.meters sizes.floorHalfSize -sizes.floorHalfSize 0)
+                        (Point3d.meters sizes.floorHalfSize sizes.floorHalfSize 0)
+                        (Point3d.meters -sizes.floorHalfSize sizes.floorHalfSize 0)
+
+                Numbered ball ->
+                    let
+                        number =
+                            EightBall.ballNumber ball
+
+                        colorTexture =
+                            Dict.get number ballTextures
+                                |> Maybe.withDefault (Material.constant (Color.rgb255 0 0 0))
+
+                        material =
+                            Material.texturedPbr
+                                { baseColor = colorTexture
+                                , roughness = roughnessTexture
+                                , metallic = Material.constant 0
+                                }
+                    in
+                    Scene3d.sphereWithShadow
+                        material
+                        ballSphere
+                        -- rotate to see the numbers
+                        |> Scene3d.rotateAround
+                            (Axis3d.through (Sphere3d.centerPoint ballSphere) Direction3d.x)
+                            (Angle.degrees 90)
+
+                CueBall ->
+                    Scene3d.sphereWithShadow
+                        (Material.matte (Color.rgb255 255 255 255))
+                        ballSphere
+
+                Table ->
+                    tableBlocks
+                        |> List.map
+                            (Scene3d.blockWithShadow
+                                (Material.nonmetal
+                                    { baseColor = Color.rgb255 10 80 0
+                                    , roughness = 1
+                                    }
+                                )
+                            )
+                        |> Scene3d.group
+
+                Walls ->
+                    wallsBlocks
+                        |> List.map
+                            (Scene3d.blockWithShadow
+                                (Material.nonmetal
+                                    { baseColor = Color.rgb255 10 80 0
+                                    , roughness = 0.9
+                                    }
+                                )
+                            )
+                        |> Scene3d.group
+    in
+    Scene3d.placeIn frame entity
+
+
+cueBall : Body Id
 cueBall =
-    Body.sphere ballSphere
-        { id = CueBall
-        , entity =
-            Scene3d.sphereWithShadow
-                (Material.matte (Color.rgb255 255 255 255))
-                ballSphere
-        }
+    Body.sphere ballSphere CueBall
         |> Body.withMaterial ballMaterial
         |> Body.withDamping ballDamping
         |> Body.withBehavior (Body.dynamic (Mass.grams 170))
@@ -223,18 +277,9 @@ ballMaterial =
         }
 
 
-floor : Body Data
+floor : Body Id
 floor =
-    Body.plane
-        { id = Floor
-        , entity =
-            Scene3d.quad
-                (Material.matte (Color.rgb255 46 52 54))
-                (Point3d.meters -sizes.floorHalfSize -sizes.floorHalfSize 0)
-                (Point3d.meters sizes.floorHalfSize -sizes.floorHalfSize 0)
-                (Point3d.meters sizes.floorHalfSize sizes.floorHalfSize 0)
-                (Point3d.meters -sizes.floorHalfSize sizes.floorHalfSize 0)
-        }
+    Body.plane Floor
         |> Body.moveTo (Point3d.meters 0 0 -sizes.height)
 
 
@@ -276,48 +321,37 @@ sizes =
     }
 
 
-tableSurface : Body Data
-tableSurface =
+tableBlocks : List (Block3d Meters BodyCoordinates)
+tableBlocks =
     let
         cornerBlock =
             Block3d.from
                 (Point3d.meters -sizes.halfCornerDiagonal -sizes.halfCornerDiagonal 0)
                 (Point3d.meters sizes.halfCornerDiagonal sizes.halfCornerDiagonal -sizes.thickness)
                 |> Block3d.rotateAround Axis3d.z (Angle.degrees 45)
-
-        blocks =
-            [ Block3d.from
-                (Point3d.meters -sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) 0)
-                (Point3d.meters sizes.halfWidth (sizes.halfLength - sizes.halfCornerHole) -sizes.thickness)
-            , Block3d.from
-                (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0)
-                (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) sizes.halfLength -sizes.thickness)
-            , Block3d.from
-                (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0)
-                (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) -sizes.halfLength -sizes.thickness)
-            , Block3d.from
-                (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0)
-                (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) -sizes.halfLength -sizes.thickness)
-            , Block3d.translateBy (Vector3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0) cornerBlock
-            , Block3d.translateBy (Vector3d.meters (sizes.halfWidth - sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0) cornerBlock
-            , Block3d.translateBy (Vector3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0) cornerBlock
-            , Block3d.translateBy (Vector3d.meters (sizes.halfWidth - sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0) cornerBlock
-            ]
     in
-    Body.compound (List.map Physics.Shape.block blocks)
-        { id = Table
-        , entity =
-            List.map
-                (Scene3d.blockWithShadow
-                    (Material.nonmetal
-                        { baseColor = Color.rgb255 10 80 0
-                        , roughness = 1
-                        }
-                    )
-                )
-                blocks
-                |> Scene3d.group
-        }
+    [ Block3d.from
+        (Point3d.meters -sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) 0)
+        (Point3d.meters sizes.halfWidth (sizes.halfLength - sizes.halfCornerHole) -sizes.thickness)
+    , Block3d.from
+        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0)
+        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) sizes.halfLength -sizes.thickness)
+    , Block3d.from
+        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0)
+        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) -sizes.halfLength -sizes.thickness)
+    , Block3d.from
+        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0)
+        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) -sizes.halfLength -sizes.thickness)
+    , Block3d.translateBy (Vector3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0) cornerBlock
+    , Block3d.translateBy (Vector3d.meters (sizes.halfWidth - sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0) cornerBlock
+    , Block3d.translateBy (Vector3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0) cornerBlock
+    , Block3d.translateBy (Vector3d.meters (sizes.halfWidth - sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0) cornerBlock
+    ]
+
+
+tableSurface : Body Id
+tableSurface =
+    Body.compound (List.map Physics.Shape.block tableBlocks) Table
         |> Body.withMaterial
             (Physics.Material.custom
                 { friction = 0.8
@@ -326,45 +360,28 @@ tableSurface =
             )
 
 
-tableWalls : Body Data
+wallsBlocks : List (Block3d Meters BodyCoordinates)
+wallsBlocks =
+    [ Block3d.from
+        (Point3d.meters -sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) sizes.wallHeight)
+        (Point3d.meters (-sizes.halfWidth + sizes.wallThickness) -sizes.halfHole 0)
+    , Block3d.from
+        (Point3d.meters (sizes.halfWidth - sizes.wallThickness) -sizes.halfHole 0)
+        (Point3d.meters sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) sizes.wallHeight)
+    , Block3d.from
+        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) (-sizes.halfLength + sizes.wallThickness) 0)
+        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) -sizes.halfLength sizes.wallHeight)
+    ]
+        |> List.foldl
+            (\block result ->
+                Block3d.rotateAround Axis3d.z (Angle.degrees 180) block :: block :: result
+            )
+            []
+
+
+tableWalls : Body Id
 tableWalls =
-    let
-        blocks =
-            [ Block3d.from
-                (Point3d.meters -sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) sizes.wallHeight)
-                (Point3d.meters (-sizes.halfWidth + sizes.wallThickness) -sizes.halfHole 0)
-            , Block3d.from
-                (Point3d.meters (sizes.halfWidth - sizes.wallThickness) -sizes.halfHole 0)
-                (Point3d.meters sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) sizes.wallHeight)
-            , Block3d.from
-                (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) (-sizes.halfLength + sizes.wallThickness) 0)
-                (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) -sizes.halfLength sizes.wallHeight)
-            ]
-                |> List.foldl
-                    (\block result ->
-                        Block3d.rotateAround Axis3d.z (Angle.degrees 180) block :: block :: result
-                    )
-                    []
-
-        shapes =
-            blocks
-                |> List.map Physics.Shape.block
-
-        entities =
-            blocks
-                |> List.map
-                    (Scene3d.blockWithShadow
-                        (Material.nonmetal
-                            { baseColor = Color.rgb255 10 80 0
-                            , roughness = 0.9
-                            }
-                        )
-                    )
-    in
-    Body.compound shapes
-        { id = Walls
-        , entity = Scene3d.group entities
-        }
+    Body.compound (List.map Physics.Shape.block wallsBlocks) Walls
         |> Body.withMaterial
             (Physics.Material.custom
                 { friction = 0.3

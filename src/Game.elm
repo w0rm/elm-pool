@@ -1,9 +1,8 @@
 module Game exposing (Model, Msg, initial, subscriptions, update, view)
 
-import Acceleration
 import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
-import Bodies exposing (Data, Id(..))
+import Bodies exposing (Id(..))
 import Browser.Events
 import Camera3d exposing (Camera3d)
 import Color exposing (Color)
@@ -45,7 +44,7 @@ type ScreenCoordinates
 
 
 type alias Model =
-    { world : World Data
+    { world : World Id
     , ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Material.Texture Float
     , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
@@ -98,15 +97,11 @@ type Msg
 initial : Dict Int (Material.Texture Color) -> Material.Texture Float -> ( Float, Float ) -> Model
 initial ballTextures roughnessTexture ( width, height ) =
     let
-        world =
-            Bodies.balls roughnessTexture ballTextures
-                |> List.foldl World.add initialWorld
-
         time =
             -- TODO: consider getting the initial time
             Time.millisToPosix 0
     in
-    { world = world
+    { world = Bodies.world
     , ballTextures = ballTextures
     , roughnessTexture = roughnessTexture
     , time = time
@@ -124,18 +119,6 @@ initial ballTextures roughnessTexture ( width, height ) =
     }
 
 
-initialWorld : World Data
-initialWorld =
-    World.empty
-        |> World.withGravity
-            (Acceleration.metersPerSecondSquared 9.80665)
-            Direction3d.negativeZ
-        |> World.add Bodies.tableSurface
-        |> World.add Bodies.tableWalls
-        |> World.add Bodies.floor
-        |> World.add Bodies.cueBall
-
-
 camera : Length -> Angle -> Angle -> Point3d Meters WorldCoordinates -> Camera3d Meters WorldCoordinates
 camera distance cameraAzimuth cameraElevation focalPoint =
     Camera3d.perspective
@@ -151,10 +134,10 @@ camera distance cameraAzimuth cameraElevation focalPoint =
         }
 
 
-cuePosition : World Data -> Point3d Meters WorldCoordinates
+cuePosition : World Id -> Point3d Meters WorldCoordinates
 cuePosition world =
     World.bodies world
-        |> List.filter (\b -> (Body.data b).id == CueBall)
+        |> List.filter (\b -> Body.data b == CueBall)
         |> List.head
         |> Maybe.map (\b -> Point3d.placeIn (Body.frame b) (Body.centerOfMass b))
         |> Maybe.withDefault Point3d.origin
@@ -174,7 +157,7 @@ ray { dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } =
 
 
 view : Model -> Html Msg
-view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } as model) =
+view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } as model) =
     let
         dimensionsInt =
             Tuple.mapBoth Quantity.round Quantity.round dimensions
@@ -200,7 +183,7 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
                     World.bodies world
                         |> List.filter
                             (\b ->
-                                (Body.data b).id /= CueBall
+                                Body.data b /= CueBall
                             )
 
                 _ ->
@@ -208,11 +191,7 @@ view ({ world, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint 
 
         entities =
             List.map
-                (\body ->
-                    Scene3d.placeIn
-                        (Body.frame body)
-                        (Body.data body).entity
-                )
+                (Bodies.bodyToEntity roughnessTexture ballTextures)
                 bodies
 
         entitiesWithUI =
@@ -461,11 +440,11 @@ subscriptions _ =
         ]
 
 
-ballsStoppedMoving : World Data -> Bool
+ballsStoppedMoving : World Id -> Bool
 ballsStoppedMoving world =
     List.all
         (\body ->
-            case (Body.data body).id of
+            case Body.data body of
                 CueBall ->
                     Body.velocity body
                         |> Vector3d.length
@@ -571,7 +550,7 @@ update msg model =
                                     , world =
                                         World.update
                                             (\b ->
-                                                if (Body.data b).id == CueBall then
+                                                if Body.data b == CueBall then
                                                     Body.moveTo position b
 
                                                 else
@@ -599,7 +578,7 @@ update msg model =
                                 , world =
                                     World.update
                                         (\b ->
-                                            if (Body.data b).id == CueBall then
+                                            if Body.data b == CueBall then
                                                 Body.moveTo position b
 
                                             else
@@ -614,7 +593,7 @@ update msg model =
                 Playing _ ->
                     case World.raycast (ray model mouse) model.world of
                         Just raycastResult ->
-                            case (Body.data raycastResult.body).id of
+                            case Body.data raycastResult.body of
                                 CueBall ->
                                     let
                                         frame =
@@ -703,7 +682,7 @@ update msg model =
                         Playing _ ->
                             case World.raycast (ray model mouse) model.world of
                                 Just raycastResult ->
-                                    case (Body.data raycastResult.body).id of
+                                    case Body.data raycastResult.body of
                                         CueBall ->
                                             { model | mouseAction = HoveringCueBall }
 
@@ -740,7 +719,7 @@ update msg model =
                         , world =
                             World.update
                                 (\b ->
-                                    if (Body.data b).id == CueBall then
+                                    if Body.data b == CueBall then
                                         let
                                             axis =
                                                 cueAxis model
@@ -771,11 +750,11 @@ update msg model =
                 )
 
 
-canSpawnHere : Point3d Meters WorldCoordinates -> World Data -> Bool
+canSpawnHere : Point3d Meters WorldCoordinates -> World Id -> Bool
 canSpawnHere point world =
     List.all
         (\b ->
-            case (Body.data b).id of
+            case Body.data b of
                 Numbered _ ->
                     Quantity.greaterThan (Length.millimeters 57.15)
                         (Point3d.distanceFrom point (Body.originPoint b))
@@ -786,7 +765,7 @@ canSpawnHere point world =
         (World.bodies world)
 
 
-simulateWithEvents : Int -> Time.Posix -> World Data -> List ( Time.Posix, ShotEvent ) -> ( World Data, List ( Time.Posix, ShotEvent ) )
+simulateWithEvents : Int -> Time.Posix -> World Id -> List ( Time.Posix, ShotEvent ) -> ( World Id, List ( Time.Posix, ShotEvent ) )
 simulateWithEvents frame time world events =
     if frame > 0 then
         let
@@ -801,16 +780,16 @@ simulateWithEvents frame time world events =
                             ( b1, b2 ) =
                                 Contact.bodies contact
                         in
-                        case ( (Body.data b1).id, (Body.data b2).id ) of
+                        case ( Body.data b1, Body.data b2 ) of
                             -- TODO: check collisions with pockets instead when we have them
                             ( Numbered ball, Floor ) ->
                                 ( EightBall.ballFellInPocket time ball :: currentEvents
-                                , World.keepIf (\b -> (Body.data b).id /= Numbered ball) currentWorld
+                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
                                 )
 
                             ( Floor, Numbered ball ) ->
                                 ( EightBall.ballFellInPocket time ball :: currentEvents
-                                , World.keepIf (\b -> (Body.data b).id /= Numbered ball) currentWorld
+                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
                                 )
 
                             ( CueBall, Numbered ball ) ->
