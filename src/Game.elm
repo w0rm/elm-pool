@@ -30,7 +30,7 @@ import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
 import Rectangle2d
-import Rectangle3d exposing (Rectangle3d)
+import Rectangle3d exposing (Rectangle3d, dimensions)
 import Scene3d
 import Scene3d.Light
 import Scene3d.Material as Material
@@ -296,6 +296,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
             , toneMapping = Scene3d.noToneMapping
             }
         , viewCurrentStatus model.state
+        , viewShootingStrength model
         ]
 
 
@@ -451,6 +452,55 @@ viewGameOver state =
         ]
 
 
+viewShootingStrength : Model -> Html Msg
+viewShootingStrength { state, dimensions } =
+    case state of
+        Playing { shootButton } ->
+            case shootButton of
+                Nothing ->
+                    Html.text ""
+
+                Just duration ->
+                    let
+                        progressHeight =
+                            shootingStrength duration * (barHeight - 4)
+
+                        height =
+                            Tuple.second dimensions |> Pixels.inPixels
+
+                        barHeight =
+                            height * 0.6
+
+                        barBottom =
+                            (height - barHeight) / 2
+                    in
+                    Html.div []
+                        [ Html.div
+                            [ Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style "right" "50px"
+                            , Html.Attributes.style "bottom" (String.fromFloat barBottom ++ "px")
+                            , Html.Attributes.style "width" "40px"
+                            , Html.Attributes.style "height" (String.fromFloat barHeight ++ "px")
+                            , Html.Attributes.style "border" "2px solid #fff"
+                            , Html.Attributes.style "border-radius" "10px"
+                            ]
+                            []
+                        , Html.div
+                            [ Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style "right" "54px"
+                            , Html.Attributes.style "bottom" (String.fromFloat (barBottom + 4) ++ "px")
+                            , Html.Attributes.style "width" "36px"
+                            , Html.Attributes.style "background" "#fff"
+                            , Html.Attributes.style "border-radius" "6px"
+                            , Html.Attributes.style "height" (String.fromFloat progressHeight ++ "px")
+                            ]
+                            []
+                        ]
+
+        _ ->
+            Html.text ""
+
+
 currentPlayer : State -> String
 currentPlayer state =
     let
@@ -567,7 +617,7 @@ update msg model =
                                 { playingState
                                     | shootButton =
                                         Maybe.map
-                                            (Quantity.plus (seconds (1 / 120)))
+                                            (Quantity.plus (seconds (1 / 60)))
                                             playingState.shootButton
                                 }
                     }
@@ -800,11 +850,21 @@ update msg model =
         ShootButtonDown ->
             case model.state of
                 Playing playingState ->
-                    let
-                        newPlayingState =
-                            { playingState | shootButton = Just (Duration.milliseconds 0) }
-                    in
-                    { model | state = Playing newPlayingState }
+                    -- ShootButtonDown can be sent many times
+                    -- we need to check if it wasn't already pressed
+                    case playingState.shootButton of
+                        Nothing ->
+                            let
+                                newPlayingState =
+                                    { playingState
+                                        | shootButton =
+                                            Just (Duration.milliseconds 0)
+                                    }
+                            in
+                            { model | state = Playing newPlayingState }
+
+                        _ ->
+                            model
 
                 _ ->
                     model
@@ -812,29 +872,40 @@ update msg model =
         ShootButtonUp ->
             case model.state of
                 Playing playingState ->
-                    { model
-                        | state = Simulating [] playingState.pool
-                        , focalPoint = Point3d.origin
-                        , world =
-                            World.update
-                                (\b ->
-                                    if Body.data b == CueBall then
-                                        let
-                                            axis =
-                                                cueAxis model playingState
-                                        in
-                                        -- TODO use the duration from the Pressed state to calculate the force
-                                        Body.applyImpulse
-                                            (Quantity.times (Duration.milliseconds 16) (Force.newtons 50))
-                                            (Axis3d.reverse axis |> Axis3d.direction)
-                                            (Axis3d.originPoint axis)
-                                            b
+                    case playingState.shootButton of
+                        Just duration ->
+                            { model
+                                | state = Simulating [] playingState.pool
+                                , focalPoint = Point3d.origin
+                                , world =
+                                    World.update
+                                        (\b ->
+                                            if Body.data b == CueBall then
+                                                let
+                                                    axis =
+                                                        cueAxis model playingState
 
-                                    else
-                                        b
-                                )
-                                model.world
-                    }
+                                                    force =
+                                                        Quantity.interpolateFrom
+                                                            (Force.newtons 10)
+                                                            (Force.newtons 60)
+                                                            (shootingStrength duration)
+                                                in
+                                                -- TODO use the duration from the Pressed state to calculate the force
+                                                Body.applyImpulse
+                                                    (Quantity.times (Duration.milliseconds 16) force)
+                                                    (Axis3d.reverse axis |> Axis3d.direction)
+                                                    (Axis3d.originPoint axis)
+                                                    b
+
+                                            else
+                                                b
+                                        )
+                                        model.world
+                            }
+
+                        Nothing ->
+                            model
 
                 _ ->
                     model
@@ -846,6 +917,15 @@ update msg model =
                     Quantity.unwrap
                     model.dimensions
                 )
+
+
+shootingStrength : Duration -> Float
+shootingStrength duration =
+    let
+        ms =
+            Duration.inMilliseconds duration
+    in
+    -(cos (ms / 2000 * pi) / 2) + 0.5
 
 
 canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
