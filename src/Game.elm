@@ -25,6 +25,7 @@ import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
+import Plane3d exposing (Plane3d)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
@@ -848,38 +849,51 @@ update msg model =
 
 canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
 canSpawnHere mouseRay area world =
-    case Geometry.intersectionWithRectangle mouseRay Bodies.areaBallInHand of
-        Just point1 ->
-            case Geometry.intersectionWithRectangle mouseRay area of
-                Just point2 ->
-                    let
-                        position =
-                            Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point2
-
-                        canSpawn =
-                            List.all
-                                (\b ->
-                                    case Body.data b of
-                                        Numbered _ ->
-                                            Quantity.greaterThan (Length.millimeters 57.15)
-                                                (Point3d.distanceFrom position (Body.originPoint b))
-
-                                        _ ->
-                                            True
-                                )
-                                (World.bodies world)
-                    in
-                    if canSpawn then
-                        CanSpawnAt position
-
-                    else
-                        CannotSpawn position
+    let
+        hitsTable =
+            case World.raycast mouseRay world of
+                Just { body } ->
+                    Body.data body /= Floor
 
                 Nothing ->
-                    CannotSpawn (Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point1)
+                    False
+    in
+    if hitsTable then
+        case Axis3d.intersectionWithPlane Plane3d.xy mouseRay of
+            Just point1 ->
+                case Geometry.intersectionWithRectangle mouseRay area of
+                    Just point2 ->
+                        let
+                            position =
+                                Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point2
 
-        Nothing ->
-            HoveringOuside
+                            canSpawn =
+                                List.all
+                                    (\b ->
+                                        case Body.data b of
+                                            Numbered _ ->
+                                                Quantity.greaterThan (Length.millimeters 57.15)
+                                                    (Point3d.distanceFrom position (Body.originPoint b))
+
+                                            _ ->
+                                                True
+                                    )
+                                    (World.bodies world)
+                        in
+                        if canSpawn then
+                            CanSpawnAt position
+
+                        else
+                            CannotSpawn position
+
+                    Nothing ->
+                        CannotSpawn (Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point1)
+
+            Nothing ->
+                HoveringOuside
+
+    else
+        HoveringOuside
 
 
 simulateWithEvents : Int -> Time.Posix -> World Id -> List ( Time.Posix, ShotEvent ) -> ( World Id, List ( Time.Posix, ShotEvent ) )
