@@ -671,6 +671,7 @@ update msg model =
 
                                         hitRelativeAzimuth =
                                             Quantity.minus model.cameraAzimuth hitAzimuth
+                                                |> Angle.normalize
 
                                         hitRelativeAzimuthDegrees =
                                             Angle.inDegrees hitRelativeAzimuth
