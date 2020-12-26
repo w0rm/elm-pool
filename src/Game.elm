@@ -390,7 +390,7 @@ viewCurrentStatus state =
         url('assets/Teko-Medium.woff') format('woff');
     font-weight: 500;
     font-style: normal;
-    font-display: swap;
+    font-display: block;
 }
 """
             ]
