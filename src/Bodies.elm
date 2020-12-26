@@ -4,6 +4,7 @@ module Bodies exposing
     , areaBallInHandEntity
     , areaBehindTheHeadString
     , areaBehindTheHeadStringEntity
+    , ballSphere
     , bodyToEntity
     , cueBall
     , world
@@ -67,7 +68,7 @@ areaBallInHandEntity =
         [ v1, v2, v3, v4 ] ->
             Scene3d.quad
                 (Material.nonmetal
-                    { baseColor = Color.rgb255 80 80 0
+                    { baseColor = Color.rgb255 30 100 20
                     , roughness = 1
                     }
                 )
@@ -103,7 +104,7 @@ areaBehindTheHeadStringEntity =
         [ v1, v2, v3, v4 ] ->
             Scene3d.quad
                 (Material.nonmetal
-                    { baseColor = Color.rgb255 80 80 0
+                    { baseColor = Color.rgb255 30 100 20
                     , roughness = 1
                     }
                 )

@@ -12,6 +12,7 @@ import Direction3d
 import Duration exposing (Duration, seconds)
 import EightBall exposing (AwaitingBallInHand, AwaitingNewGame, AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
 import Force
+import Frame3d
 import Geometry
 import Html exposing (Html)
 import Html.Attributes
@@ -103,7 +104,7 @@ type alias PlacingBallState awaitingWhat =
 
 type PlacingBallMouse
     = CanSpawnAt (Point3d Meters WorldCoordinates)
-    | CannotSpawn
+    | CannotSpawn (Point3d Meters WorldCoordinates)
     | HoveringOuside
 
 
@@ -225,14 +226,14 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
 
         entitiesWithUI =
             case model.state of
-                PlacingBehindHeadString _ ->
-                    Bodies.areaBehindTheHeadStringEntity :: entities
+                PlacingBehindHeadString { mouse } ->
+                    placingBallEntities mouse Bodies.areaBehindTheHeadStringEntity :: entities
 
-                PlacingBallInHand _ ->
-                    Bodies.areaBallInHandEntity :: entities
+                PlacingBallInHand { mouse } ->
+                    placingBallEntities mouse Bodies.areaBallInHandEntity :: entities
 
                 Playing playingState ->
-                    cueEntity model playingState :: entities
+                    playingEntities model playingState :: entities
 
                 _ ->
                     entities
@@ -283,8 +284,33 @@ cueAxis { cameraAzimuth, world } { hitRelativeAzimuth, cueElevation, hitElevatio
     Axis3d.through point axisDirection
 
 
-cueEntity : Model -> PlayingState -> Scene3d.Entity WorldCoordinates
-cueEntity model playingState =
+placingBallEntities : PlacingBallMouse -> Scene3d.Entity WorldCoordinates -> Scene3d.Entity WorldCoordinates
+placingBallEntities placingBall areaEntity =
+    case placingBall of
+        CanSpawnAt position ->
+            Scene3d.group
+                [ areaEntity
+                , Scene3d.sphereWithShadow
+                    (Material.matte (Color.rgb255 255 255 255))
+                    Bodies.ballSphere
+                    |> Scene3d.placeIn (Frame3d.atPoint position)
+                ]
+
+        CannotSpawn position ->
+            Scene3d.group
+                [ areaEntity
+                , Scene3d.sphereWithShadow
+                    (Material.matte (Color.rgb255 255 150 150))
+                    Bodies.ballSphere
+                    |> Scene3d.placeIn (Frame3d.atPoint position)
+                ]
+
+        HoveringOuside ->
+            Scene3d.nothing
+
+
+playingEntities : Model -> PlayingState -> Scene3d.Entity WorldCoordinates
+playingEntities model playingState =
     let
         axis =
             cueAxis model playingState
@@ -569,7 +595,7 @@ update msg model =
                                 , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                             }
 
-                        CannotSpawn ->
+                        CannotSpawn _ ->
                             model
 
                         HoveringOuside ->
@@ -584,7 +610,7 @@ update msg model =
                                 , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                             }
 
-                        CannotSpawn ->
+                        CannotSpawn _ ->
                             model
 
                         HoveringOuside ->
@@ -792,40 +818,35 @@ update msg model =
 
 canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
 canSpawnHere mouseRay area world =
-    case World.raycast mouseRay world of
-        Just { body } ->
-            case Body.data body of
-                Floor ->
-                    HoveringOuside
+    case Geometry.intersectionWithRectangle mouseRay Bodies.areaBallInHand of
+        Just point1 ->
+            case Geometry.intersectionWithRectangle mouseRay area of
+                Just point2 ->
+                    let
+                        position =
+                            Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point2
 
-                _ ->
-                    case Geometry.intersectionWithRectangle mouseRay area of
-                        Just point ->
-                            let
-                                position =
-                                    Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
+                        canSpawn =
+                            List.all
+                                (\b ->
+                                    case Body.data b of
+                                        Numbered _ ->
+                                            Quantity.greaterThan (Length.millimeters 57.15)
+                                                (Point3d.distanceFrom position (Body.originPoint b))
 
-                                canSpawn =
-                                    List.all
-                                        (\b ->
-                                            case Body.data b of
-                                                Numbered _ ->
-                                                    Quantity.greaterThan (Length.millimeters 57.15)
-                                                        (Point3d.distanceFrom point (Body.originPoint b))
+                                        _ ->
+                                            True
+                                )
+                                (World.bodies world)
+                    in
+                    if canSpawn then
+                        CanSpawnAt position
 
-                                                _ ->
-                                                    True
-                                        )
-                                        (World.bodies world)
-                            in
-                            if canSpawn then
-                                CanSpawnAt position
+                    else
+                        CannotSpawn position
 
-                            else
-                                CannotSpawn
-
-                        Nothing ->
-                            CannotSpawn
+                Nothing ->
+                    CannotSpawn (Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point1)
 
         Nothing ->
             HoveringOuside

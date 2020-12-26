@@ -9,11 +9,11 @@ Physically simulated pool game. Work in progress.
   1. Click and drag anywhere to rotate the camera around the focal point ✅
   2. Zoom into the focal point with the mousewheel ✅
 
-- Placing the cue ball behind the head string
+- Placing the cue ball in hand
 
   1. The focal point is at the center of the table ✅
-  2. Hover over the table to choose where to place the cue ball
-  3. The cue ball is rendered in red when it overlaps with other objects
+  2. Hover over the table to choose where to place the cue ball ✅
+  3. The cue ball is rendered in red when it overlaps with other objects ✅
   4. Click to place the cue ball if it is not overlapping with other objects ✅
 
 - Aiming and shooting
