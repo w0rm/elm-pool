@@ -52,34 +52,46 @@ type alias Model =
     , focalPoint : Point3d Meters WorldCoordinates
     , cameraAzimuth : Angle
     , cameraElevation : Angle
-    , cueElevation : Angle
-    , hitElevation : Angle
-    , hitRelativeAzimuth : Angle
-    , mouseAction : MouseState
-    , shootButtonState : ShootButtonState
+    , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
     , state : State
     , time : Posix
     }
 
 
-type MouseState
-    = Orbiting (Point2d Pixels ScreenCoordinates)
-    | HoveringCueBall -- TODO: use to render the clickable area
-    | SettingCueElevation (Point2d Pixels ScreenCoordinates)
-    | Still
-
-
-type ShootButtonState
-    = Pressed Duration
-    | Released
-
-
 type State
     = PlacingBehindHeadString (Pool AwaitingPlaceBallBehindHeadstring)
-    | Playing (Pool AwaitingNextShot)
+    | Playing PlayingState
     | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingNextShot)
     | PlacingBallInHand (Pool AwaitingBallInHand)
     | GameOver (EightBall.Pool AwaitingNewGame) Int
+
+
+type alias PlayingState =
+    { pool : Pool AwaitingNextShot
+    , cueElevation : Angle
+    , hitElevation : Angle
+    , hitRelativeAzimuth : Angle
+    , shootButton : Maybe Duration
+    , mouse : PlayingMouse
+    }
+
+
+type PlayingMouse
+    = HoveringCueBall -- TODO: use to render the clickable area
+    | SettingCueElevation (Point2d Pixels ScreenCoordinates)
+    | NothingMeaningful
+
+
+initialPlayingState : Pool AwaitingNextShot -> State
+initialPlayingState pool =
+    Playing
+        { pool = pool
+        , cueElevation = Angle.degrees 5
+        , hitRelativeAzimuth = Angle.degrees 0
+        , hitElevation = Angle.degrees 0
+        , mouse = NothingMeaningful
+        , shootButton = Nothing
+        }
 
 
 type Msg
@@ -110,11 +122,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     , focalPoint = Point3d.origin
     , cameraAzimuth = Angle.degrees -25
     , cameraElevation = Angle.degrees 30
-    , cueElevation = Angle.degrees 5
-    , hitRelativeAzimuth = Angle.degrees 0
-    , hitElevation = Angle.degrees 0
-    , mouseAction = Still
-    , shootButtonState = Released
+    , orbiting = Nothing
     , state = PlacingBehindHeadString (EightBall.rack time EightBall.start)
     }
 
@@ -202,8 +210,8 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                 PlacingBallInHand _ ->
                     Bodies.areaBallInHandEntity :: entities
 
-                Playing _ ->
-                    cueEntity model :: entities
+                Playing playingState ->
+                    cueEntity model playingState :: entities
 
                 _ ->
                     entities
@@ -234,8 +242,8 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
         ]
 
 
-cueAxis : Model -> Axis3d Meters WorldCoordinates
-cueAxis { cameraAzimuth, hitRelativeAzimuth, cueElevation, hitElevation, world } =
+cueAxis : Model -> PlayingState -> Axis3d Meters WorldCoordinates
+cueAxis { cameraAzimuth, world } { hitRelativeAzimuth, cueElevation, hitElevation } =
     let
         hitAzimuth =
             cameraAzimuth
@@ -254,11 +262,11 @@ cueAxis { cameraAzimuth, hitRelativeAzimuth, cueElevation, hitElevation, world }
     Axis3d.through point axisDirection
 
 
-cueEntity : Model -> Scene3d.Entity WorldCoordinates
-cueEntity model =
+cueEntity : Model -> PlayingState -> Scene3d.Entity WorldCoordinates
+cueEntity model playingState =
     let
         axis =
-            cueAxis model
+            cueAxis model playingState
 
         maybeCylinder =
             Cylinder3d.from
@@ -369,7 +377,7 @@ currentPlayer state =
                 PlacingBehindHeadString pool ->
                     EightBall.currentPlayer pool
 
-                Playing pool ->
+                Playing { pool } ->
                     EightBall.currentPlayer pool
 
                 Simulating shotEventPosixTimeList pool ->
@@ -401,7 +409,7 @@ currentTarget state =
                 PlacingBehindHeadString pool ->
                     EightBall.currentTarget pool
 
-                Playing pool ->
+                Playing { pool } ->
                     EightBall.currentTarget pool
 
                 Simulating shotEventPosixTimeList pool ->
@@ -470,21 +478,16 @@ update msg model =
                     { model | time = time }
             in
             case newModel.state of
-                PlacingBallInHand _ ->
-                    newModel
-
-                PlacingBehindHeadString _ ->
-                    newModel
-
-                Playing _ ->
+                Playing playingState ->
                     { newModel
-                        | shootButtonState =
-                            case newModel.shootButtonState of
-                                Pressed duration ->
-                                    Pressed (Quantity.plus duration (seconds (1 / 120)))
-
-                                Released ->
-                                    Released
+                        | state =
+                            Playing
+                                { playingState
+                                    | shootButton =
+                                        Maybe.map
+                                            (Quantity.plus (seconds (1 / 120)))
+                                            playingState.shootButton
+                                }
                     }
 
                 Simulating events pool ->
@@ -498,7 +501,7 @@ update msg model =
 
                             NextShot newPool ->
                                 { newModel
-                                    | state = Playing newPool
+                                    | state = initialPlayingState newPool
                                     , focalPoint = cuePosition newModel.world
                                 }
 
@@ -520,7 +523,7 @@ update msg model =
                             , world = newWorld
                         }
 
-                GameOver _ _ ->
+                _ ->
                     newModel
 
         Resize width height ->
@@ -546,7 +549,7 @@ update msg model =
                             if canSpawnHere position model.world then
                                 { model
                                     | focalPoint = position
-                                    , state = Playing (EightBall.ballPlacedInHand model.time pool)
+                                    , state = initialPlayingState (EightBall.ballPlacedInHand model.time pool)
                                     , world =
                                         World.update
                                             (\b ->
@@ -560,10 +563,10 @@ update msg model =
                                 }
 
                             else
-                                { model | mouseAction = Orbiting mouse }
+                                { model | orbiting = Just mouse }
 
                         Nothing ->
-                            { model | mouseAction = Orbiting mouse }
+                            { model | orbiting = Just mouse }
 
                 PlacingBehindHeadString pool ->
                     case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBehindTheHeadString of
@@ -573,7 +576,7 @@ update msg model =
                                     Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
                             in
                             { model
-                                | state = Playing (EightBall.ballPlacedBehindHeadString model.time pool)
+                                | state = initialPlayingState (EightBall.ballPlacedBehindHeadString model.time pool)
                                 , focalPoint = position
                                 , world =
                                     World.update
@@ -588,9 +591,9 @@ update msg model =
                             }
 
                         Nothing ->
-                            { model | mouseAction = Orbiting mouse }
+                            { model | orbiting = Just mouse }
 
-                Playing _ ->
+                Playing playingState ->
                     case World.raycast (ray model mouse) model.world of
                         Just raycastResult ->
                             case Body.data raycastResult.body of
@@ -617,29 +620,33 @@ update msg model =
                                     -- Can only click on the visible hemisphere
                                     if abs hitRelativeAzimuthDegrees < 90 then
                                         { model
-                                            | mouseAction = SettingCueElevation mouse
-                                            , hitElevation = hitElevation
-                                            , hitRelativeAzimuth = hitRelativeAzimuth
+                                            | state =
+                                                Playing
+                                                    { playingState
+                                                        | mouse = SettingCueElevation mouse
+                                                        , hitElevation = hitElevation
+                                                        , hitRelativeAzimuth = hitRelativeAzimuth
+                                                    }
                                         }
 
                                     else
-                                        { model | mouseAction = Orbiting mouse }
+                                        { model | orbiting = Just mouse }
 
                                 _ ->
-                                    { model | mouseAction = Orbiting mouse }
+                                    { model | orbiting = Just mouse }
 
                         Nothing ->
-                            { model | mouseAction = Orbiting mouse }
+                            { model | orbiting = Just mouse }
 
                 Simulating _ _ ->
-                    { model | mouseAction = Orbiting mouse }
+                    { model | orbiting = Just mouse }
 
                 GameOver _ _ ->
                     model
 
         MouseMove mouse ->
-            case model.mouseAction of
-                Orbiting from ->
+            case model.orbiting of
+                Just from ->
                     let
                         { x, y } =
                             Vector2d.toPixels (Vector2d.from from mouse)
@@ -657,72 +664,91 @@ update msg model =
                                     (Angle.degrees 90)
                     in
                     { model
-                        | mouseAction = Orbiting mouse
+                        | orbiting = Just mouse
                         , cameraAzimuth = cameraAzimuth
                         , cameraElevation = cameraElevation
                     }
 
-                SettingCueElevation point ->
-                    let
-                        { y } =
-                            Vector2d.toPixels (Vector2d.from point mouse)
-
-                        cueElevation =
-                            model.cueElevation
-                                |> Quantity.minus (Angle.degrees y)
-                                |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
-                    in
-                    { model
-                        | mouseAction = SettingCueElevation mouse
-                        , cueElevation = cueElevation
-                    }
-
-                _ ->
+                Nothing ->
                     case model.state of
-                        Playing _ ->
-                            case World.raycast (ray model mouse) model.world of
-                                Just raycastResult ->
-                                    case Body.data raycastResult.body of
-                                        CueBall ->
-                                            { model | mouseAction = HoveringCueBall }
+                        Playing playingState ->
+                            case playingState.mouse of
+                                SettingCueElevation point ->
+                                    let
+                                        { y } =
+                                            Vector2d.toPixels (Vector2d.from point mouse)
 
-                                        _ ->
+                                        newPlayingState =
+                                            { playingState
+                                                | mouse = SettingCueElevation mouse
+                                                , cueElevation =
+                                                    playingState.cueElevation
+                                                        |> Quantity.minus (Angle.degrees y)
+                                                        |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
+                                            }
+                                    in
+                                    { model | state = Playing newPlayingState }
+
+                                _ ->
+                                    case World.raycast (ray model mouse) model.world of
+                                        Just raycastResult ->
+                                            case Body.data raycastResult.body of
+                                                CueBall ->
+                                                    let
+                                                        newPlayingState =
+                                                            { playingState | mouse = HoveringCueBall }
+                                                    in
+                                                    { model | state = Playing newPlayingState }
+
+                                                _ ->
+                                                    model
+
+                                        Nothing ->
                                             model
-
-                                Nothing ->
-                                    model
 
                         _ ->
                             model
 
         MouseUp ->
-            { model | mouseAction = Still }
+            case model.state of
+                Playing playingState ->
+                    let
+                        newPlayingState =
+                            { playingState | mouse = NothingMeaningful }
+                    in
+                    { model
+                        | state = Playing newPlayingState
+                        , orbiting = Nothing
+                    }
+
+                _ ->
+                    { model | orbiting = Nothing }
 
         ShootButtonDown ->
             case model.state of
-                Playing _ ->
-                    { model | shootButtonState = Pressed (Duration.milliseconds 0) }
+                Playing playingState ->
+                    let
+                        newPlayingState =
+                            { playingState | shootButton = Just (Duration.milliseconds 0) }
+                    in
+                    { model | state = Playing newPlayingState }
 
                 _ ->
                     model
 
         ShootButtonUp ->
-            -- TODO: check if can shoot
-            case ( model.shootButtonState, model.state ) of
-                ( Pressed _, Playing pool ) ->
+            case model.state of
+                Playing playingState ->
                     { model
-                        | state = Simulating [] pool
-                        , hitRelativeAzimuth = Angle.degrees 0
-                        , hitElevation = Angle.degrees 0
+                        | state = Simulating [] playingState.pool
                         , focalPoint = Point3d.origin
-                        , cueElevation = Angle.degrees 5
                         , world =
                             World.update
                                 (\b ->
                                     if Body.data b == CueBall then
                                         let
                                             axis =
-                                                cueAxis model
+                                                cueAxis model playingState
                                         in
                                         -- TODO use the duration from the Pressed state to calculate the force
                                         Body.applyImpulse
@@ -735,7 +761,6 @@ update msg model =
                                         b
                                 )
                                 model.world
-                        , mouseAction = Still
                     }
 
                 _ ->
