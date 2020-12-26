@@ -237,11 +237,45 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
 
                 _ ->
                     entities
+
+        cursor =
+            case model.state of
+                PlacingBehindHeadString { mouse } ->
+                    if mouse == HoveringOuside then
+                        "default"
+
+                    else
+                        "none"
+
+                PlacingBallInHand { mouse } ->
+                    if mouse == HoveringOuside then
+                        "default"
+
+                    else
+                        "none"
+
+                Playing { mouse } ->
+                    case mouse of
+                        HoveringCueBall ->
+                            "pointer"
+
+                        SettingCueElevation _ ->
+                            "ns-resize"
+
+                        _ ->
+                            "default"
+
+                Simulating _ _ ->
+                    "wait"
+
+                _ ->
+                    "default"
     in
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" "0"
         , Html.Attributes.style "top" "0"
+        , Html.Attributes.style "cursor" cursor
         , Html.Events.preventDefaultOn "wheel"
             (Json.Decode.map
                 (\deltaY -> ( MouseWheel deltaY, True ))
@@ -735,17 +769,13 @@ update msg model =
                                         Just raycastResult ->
                                             case Body.data raycastResult.body of
                                                 CueBall ->
-                                                    let
-                                                        newPlayingState =
-                                                            { playingState | mouse = HoveringCueBall }
-                                                    in
-                                                    { model | state = Playing newPlayingState }
+                                                    { model | state = Playing { playingState | mouse = HoveringCueBall } }
 
                                                 _ ->
-                                                    model
+                                                    { model | state = Playing { playingState | mouse = NothingMeaningful } }
 
                                         Nothing ->
-                                            model
+                                            { model | state = Playing { playingState | mouse = NothingMeaningful } }
 
                         _ ->
                             model
