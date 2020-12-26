@@ -5,6 +5,7 @@ module Bodies exposing
     , areaBehindTheHeadString
     , areaBehindTheHeadStringEntity
     , bodyToEntity
+    , cueBall
     , world
     )
 
@@ -124,7 +125,6 @@ world =
         |> World.add tableSurface
         |> World.add tableWalls
         |> World.add floor
-        |> World.add cueBall
         |> (\w -> List.foldl World.add w balls)
 
 

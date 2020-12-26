@@ -28,6 +28,7 @@ import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
 import Rectangle2d
+import Rectangle3d exposing (Rectangle3d)
 import Scene3d
 import Scene3d.Light
 import Scene3d.Material as Material
@@ -59,10 +60,10 @@ type alias Model =
 
 
 type State
-    = PlacingBehindHeadString (Pool AwaitingPlaceBallBehindHeadstring)
+    = PlacingBehindHeadString (PlacingBallState AwaitingPlaceBallBehindHeadstring)
     | Playing PlayingState
     | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingNextShot)
-    | PlacingBallInHand (Pool AwaitingBallInHand)
+    | PlacingBallInHand (PlacingBallState AwaitingBallInHand)
     | GameOver (EightBall.Pool AwaitingNewGame) Int
 
 
@@ -91,6 +92,26 @@ initialPlayingState pool =
         , hitElevation = Angle.degrees 0
         , mouse = NothingMeaningful
         , shootButton = Nothing
+        }
+
+
+type alias PlacingBallState awaitingWhat =
+    { pool : Pool awaitingWhat
+    , mouse : PlacingBallMouse
+    }
+
+
+type PlacingBallMouse
+    = CanSpawnAt (Point3d Meters WorldCoordinates)
+    | CannotSpawn
+    | HoveringOuside
+
+
+initialPlacingBallState : (PlacingBallState awaitingWhat -> State) -> Pool awaitingWhat -> State
+initialPlacingBallState fn pool =
+    fn
+        { pool = pool
+        , mouse = HoveringOuside
         }
 
 
@@ -123,7 +144,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     , cameraAzimuth = Angle.degrees -25
     , cameraElevation = Angle.degrees 30
     , orbiting = Nothing
-    , state = PlacingBehindHeadString (EightBall.rack time EightBall.start)
+    , state = initialPlacingBallState PlacingBehindHeadString (EightBall.rack time EightBall.start)
     }
 
 
@@ -374,19 +395,19 @@ currentPlayer state =
     let
         playerIndex =
             case state of
-                PlacingBehindHeadString pool ->
+                PlacingBehindHeadString { pool } ->
                     EightBall.currentPlayer pool
 
                 Playing { pool } ->
                     EightBall.currentPlayer pool
 
-                Simulating shotEventPosixTimeList pool ->
+                Simulating _ pool ->
                     EightBall.currentPlayer pool
 
-                PlacingBallInHand pool ->
+                PlacingBallInHand { pool } ->
                     EightBall.currentPlayer pool
 
-                GameOver pool winner ->
+                GameOver _ winner ->
                     winner
     in
     case playerIndex of
@@ -406,16 +427,16 @@ currentTarget state =
         currentTarget_ : EightBall.CurrentTarget
         currentTarget_ =
             case state of
-                PlacingBehindHeadString pool ->
+                PlacingBehindHeadString { pool } ->
                     EightBall.currentTarget pool
 
                 Playing { pool } ->
                     EightBall.currentTarget pool
 
-                Simulating shotEventPosixTimeList pool ->
+                Simulating _ pool ->
                     EightBall.currentTarget pool
 
-                PlacingBallInHand pool ->
+                PlacingBallInHand { pool } ->
                     EightBall.currentTarget pool
 
                 GameOver pool _ ->
@@ -495,7 +516,7 @@ update msg model =
                         case EightBall.playerShot (List.reverse events) pool of
                             PlayersFault newPool ->
                                 { newModel
-                                    | state = PlacingBallInHand newPool
+                                    | state = initialPlacingBallState PlacingBallInHand newPool
                                     , focalPoint = Point3d.origin
                                 }
 
@@ -539,58 +560,34 @@ update msg model =
 
         MouseDown mouse ->
             case model.state of
-                PlacingBallInHand pool ->
-                    case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBallInHand of
-                        Just point ->
-                            let
-                                position =
-                                    Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
-                            in
-                            if canSpawnHere position model.world then
-                                { model
-                                    | focalPoint = position
-                                    , state = initialPlayingState (EightBall.ballPlacedInHand model.time pool)
-                                    , world =
-                                        World.update
-                                            (\b ->
-                                                if Body.data b == CueBall then
-                                                    Body.moveTo position b
-
-                                                else
-                                                    b
-                                            )
-                                            model.world
-                                }
-
-                            else
-                                { model | orbiting = Just mouse }
-
-                        Nothing ->
-                            { model | orbiting = Just mouse }
-
-                PlacingBehindHeadString pool ->
-                    case Geometry.intersectionWithRectangle (ray model mouse) Bodies.areaBehindTheHeadString of
-                        Just point ->
-                            let
-                                position =
-                                    Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
-                            in
+                PlacingBallInHand { pool } ->
+                    case canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world of
+                        CanSpawnAt position ->
                             { model
-                                | state = initialPlayingState (EightBall.ballPlacedBehindHeadString model.time pool)
-                                , focalPoint = position
-                                , world =
-                                    World.update
-                                        (\b ->
-                                            if Body.data b == CueBall then
-                                                Body.moveTo position b
-
-                                            else
-                                                b
-                                        )
-                                        model.world
+                                | focalPoint = position
+                                , state = initialPlayingState (EightBall.ballPlacedInHand model.time pool)
+                                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                             }
 
-                        Nothing ->
+                        CannotSpawn ->
+                            model
+
+                        HoveringOuside ->
+                            { model | orbiting = Just mouse }
+
+                PlacingBehindHeadString { pool } ->
+                    case canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world of
+                        CanSpawnAt position ->
+                            { model
+                                | focalPoint = position
+                                , state = initialPlayingState (EightBall.ballPlacedBehindHeadString model.time pool)
+                                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+                            }
+
+                        CannotSpawn ->
+                            model
+
+                        HoveringOuside ->
                             { model | orbiting = Just mouse }
 
                 Playing playingState ->
@@ -671,6 +668,24 @@ update msg model =
 
                 Nothing ->
                     case model.state of
+                        PlacingBallInHand { pool } ->
+                            let
+                                newPlacingState =
+                                    { pool = pool
+                                    , mouse = canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world
+                                    }
+                            in
+                            { model | state = PlacingBallInHand newPlacingState }
+
+                        PlacingBehindHeadString { pool } ->
+                            let
+                                newPlacingState =
+                                    { pool = pool
+                                    , mouse = canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world
+                                    }
+                            in
+                            { model | state = PlacingBehindHeadString newPlacingState }
+
                         Playing playingState ->
                             case playingState.mouse of
                                 SettingCueElevation point ->
@@ -775,19 +790,45 @@ update msg model =
                 )
 
 
-canSpawnHere : Point3d Meters WorldCoordinates -> World Id -> Bool
-canSpawnHere point world =
-    List.all
-        (\b ->
-            case Body.data b of
-                Numbered _ ->
-                    Quantity.greaterThan (Length.millimeters 57.15)
-                        (Point3d.distanceFrom point (Body.originPoint b))
+canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
+canSpawnHere mouseRay area world =
+    case World.raycast mouseRay world of
+        Just { body } ->
+            case Body.data body of
+                Floor ->
+                    HoveringOuside
 
                 _ ->
-                    True
-        )
-        (World.bodies world)
+                    case Geometry.intersectionWithRectangle mouseRay area of
+                        Just point ->
+                            let
+                                position =
+                                    Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point
+
+                                canSpawn =
+                                    List.all
+                                        (\b ->
+                                            case Body.data b of
+                                                Numbered _ ->
+                                                    Quantity.greaterThan (Length.millimeters 57.15)
+                                                        (Point3d.distanceFrom point (Body.originPoint b))
+
+                                                _ ->
+                                                    True
+                                        )
+                                        (World.bodies world)
+                            in
+                            if canSpawn then
+                                CanSpawnAt position
+
+                            else
+                                CannotSpawn
+
+                        Nothing ->
+                            CannotSpawn
+
+        Nothing ->
+            HoveringOuside
 
 
 simulateWithEvents : Int -> Time.Posix -> World Id -> List ( Time.Posix, ShotEvent ) -> ( World Id, List ( Time.Posix, ShotEvent ) )
@@ -824,10 +865,14 @@ simulateWithEvents frame time world events =
                                 ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
 
                             ( CueBall, Floor ) ->
-                                ( EightBall.scratch time :: currentEvents, currentWorld )
+                                ( EightBall.scratch time :: currentEvents
+                                , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
+                                )
 
                             ( Floor, CueBall ) ->
-                                ( EightBall.scratch time :: currentEvents, currentWorld )
+                                ( EightBall.scratch time :: currentEvents
+                                , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
+                                )
 
                             --(Numbered _, Numbered _) ->
                             --    (EightBall.twoBallsCollided time, currentWorld)
