@@ -1,7 +1,6 @@
 module Bodies exposing
     ( Id(..)
     , areaBallInHand
-    , areaBallInHandEntity
     , areaBehindTheHeadString
     , areaBehindTheHeadStringEntity
     , ballSphere
@@ -60,25 +59,6 @@ areaBallInHand =
             )
         )
         |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
-
-
-areaBallInHandEntity : Entity WorldCoordinates
-areaBallInHandEntity =
-    case Rectangle3d.vertices areaBallInHand of
-        [ v1, v2, v3, v4 ] ->
-            Scene3d.quad
-                (Material.nonmetal
-                    { baseColor = Color.rgb255 30 100 20
-                    , roughness = 1
-                    }
-                )
-                v1
-                v2
-                v3
-                v4
-
-        _ ->
-            Scene3d.nothing
 
 
 areaBehindTheHeadString : Rectangle3d Meters WorldCoordinates

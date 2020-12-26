@@ -231,7 +231,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                     placingBallEntities mouse Bodies.areaBehindTheHeadStringEntity :: entities
 
                 PlacingBallInHand { mouse } ->
-                    placingBallEntities mouse Bodies.areaBallInHandEntity :: entities
+                    placingBallEntities mouse Scene3d.nothing :: entities
 
                 Playing playingState ->
                     playingEntities model playingState :: entities
