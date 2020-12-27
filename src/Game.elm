@@ -13,7 +13,6 @@ import Duration exposing (Duration, seconds)
 import EightBall exposing (AwaitingBallInHand, AwaitingNewGame, AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Frame3d
-import Geometry
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -25,7 +24,7 @@ import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
-import Plane3d exposing (Plane3d)
+import Plane3d
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
@@ -942,7 +941,7 @@ canSpawnHere mouseRay area world =
     if hitsTable then
         case Axis3d.intersectionWithPlane Plane3d.xy mouseRay of
             Just point1 ->
-                case Geometry.intersectionWithRectangle mouseRay area of
+                case intersectionWithRectangle mouseRay area of
                     Just point2 ->
                         let
                             position =
@@ -1036,6 +1035,34 @@ simulateWithEvents frame time world events =
 
     else
         ( world, events )
+
+
+intersectionWithRectangle : Axis3d units coordinates -> Rectangle3d units coordinates -> Maybe (Point3d units coordinates)
+intersectionWithRectangle axis rectangle =
+    let
+        plane =
+            Rectangle3d.axes rectangle
+    in
+    case Axis3d.intersectionWithPlane (SketchPlane3d.toPlane plane) axis of
+        (Just point) as result ->
+            let
+                ( width, height ) =
+                    Rectangle3d.dimensions rectangle
+
+                ( x, y ) =
+                    Point2d.coordinates (Point3d.projectInto plane point)
+            in
+            if
+                Quantity.lessThanOrEqualTo (Quantity.half width) (Quantity.abs x)
+                    && Quantity.lessThanOrEqualTo (Quantity.half height) (Quantity.abs y)
+            then
+                result
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
 
 
 decodeMouse : (Point2d Pixels ScreenCoordinates -> Msg) -> Json.Decode.Decoder Msg
