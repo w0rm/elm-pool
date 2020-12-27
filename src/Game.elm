@@ -19,6 +19,7 @@ import Html.Events
 import Illuminance
 import Json.Decode
 import Length exposing (Length, Meters)
+import List
 import Physics.Body as Body
 import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
@@ -256,7 +257,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                     placingBallEntities mouse Scene3d.nothing :: entities
 
                 Playing playingState ->
-                    playingEntities playingState camera3d model.cameraAzimuth :: entities
+                    playingEntities world playingState camera3d model.cameraAzimuth :: entities
 
                 _ ->
                     entities
@@ -342,6 +343,59 @@ cueAxis { hitRelativeAzimuth, cueElevation, cueBallPosition, hitElevation } came
     Axis3d.through point axisDirection
 
 
+canShoot : Axis3d Meters WorldCoordinates -> World Id -> Bool
+canShoot axis world =
+    let
+        direction =
+            Axis3d.direction axis
+
+        originPoint =
+            Axis3d.originPoint axis
+
+        pointOnCue =
+            Point3d.translateIn
+                (Direction3d.perpendicularTo direction)
+                cueRadius
+                originPoint
+
+        cueRadius =
+            Length.millimeters 6
+
+        cueMaxDistance =
+            Length.centimeters (2 + 150)
+    in
+    List.all
+        (\n ->
+            let
+                angle =
+                    Angle.degrees (360 * toFloat n / 8)
+
+                origin =
+                    Point3d.rotateAround axis angle pointOnCue
+
+                cueRay =
+                    Axis3d.through origin direction
+
+                worldWithoutCueBall =
+                    World.keepIf (\b -> Body.data b /= CueBall) world
+            in
+            case World.raycast cueRay worldWithoutCueBall of
+                Just { point, body } ->
+                    let
+                        frame =
+                            Body.frame body
+
+                        distance =
+                            Point3d.distanceFrom originPoint (Point3d.placeIn frame point)
+                    in
+                    Quantity.greaterThan cueMaxDistance distance
+
+                Nothing ->
+                    True
+        )
+        (List.range 0 7)
+
+
 placingBallEntities : PlacingBallMouse -> Scene3d.Entity WorldCoordinates -> Scene3d.Entity WorldCoordinates
 placingBallEntities placingBall areaEntity =
     case placingBall of
@@ -367,8 +421,8 @@ placingBallEntities placingBall areaEntity =
             Scene3d.nothing
 
 
-playingEntities : PlayingState -> Camera3d Meters WorldCoordinates -> Angle -> Scene3d.Entity WorldCoordinates
-playingEntities playingState camera3d cameraAzimuth =
+playingEntities : World Id -> PlayingState -> Camera3d Meters WorldCoordinates -> Angle -> Scene3d.Entity WorldCoordinates
+playingEntities world playingState camera3d cameraAzimuth =
     let
         axis =
             cueAxis playingState cameraAzimuth
@@ -413,7 +467,12 @@ playingEntities playingState camera3d cameraAzimuth =
         Just cylinder ->
             Scene3d.cylinderWithShadow
                 (Material.nonmetal
-                    { baseColor = Color.rgb255 255 255 255
+                    { baseColor =
+                        if canShoot axis world then
+                            Color.rgb255 255 255 255
+
+                        else
+                            Color.rgb255 255 150 150
                     , roughness = 0.6
                     }
                 )
@@ -909,21 +968,25 @@ update msg model =
         ShootButtonDown ->
             case model.state of
                 Playing playingState ->
-                    -- ShootButtonDown can be sent many times
-                    -- we need to check if it wasn't already pressed
-                    case playingState.shootButton of
-                        Nothing ->
-                            let
-                                newPlayingState =
-                                    { playingState
-                                        | shootButton =
-                                            Just (Duration.milliseconds 0)
-                                    }
-                            in
-                            { model | state = Playing newPlayingState }
+                    if canShoot (cueAxis playingState model.cameraAzimuth) model.world then
+                        -- ShootButtonDown can be sent many times
+                        -- we need to check if it wasn't already pressed
+                        case playingState.shootButton of
+                            Nothing ->
+                                let
+                                    newPlayingState =
+                                        { playingState
+                                            | shootButton =
+                                                Just (Duration.milliseconds 0)
+                                        }
+                                in
+                                { model | state = Playing newPlayingState }
 
-                        _ ->
-                            model
+                            _ ->
+                                model
+
+                    else
+                        model
 
                 _ ->
                     model
@@ -931,38 +994,42 @@ update msg model =
         ShootButtonUp ->
             case model.state of
                 Playing playingState ->
-                    case playingState.shootButton of
-                        Just duration ->
-                            { model
-                                | state = initialSimulatingState playingState.cueBallPosition playingState.pool
-                                , world =
-                                    World.update
-                                        (\b ->
-                                            if Body.data b == CueBall then
-                                                let
-                                                    axis =
-                                                        cueAxis playingState model.cameraAzimuth
+                    if canShoot (cueAxis playingState model.cameraAzimuth) model.world then
+                        case playingState.shootButton of
+                            Just duration ->
+                                { model
+                                    | state = initialSimulatingState playingState.cueBallPosition playingState.pool
+                                    , world =
+                                        World.update
+                                            (\b ->
+                                                if Body.data b == CueBall then
+                                                    let
+                                                        axis =
+                                                            cueAxis playingState model.cameraAzimuth
 
-                                                    force =
-                                                        Quantity.interpolateFrom
-                                                            (Force.newtons 10)
-                                                            (Force.newtons 60)
-                                                            (shootingStrength duration)
-                                                in
-                                                Body.applyImpulse
-                                                    (Quantity.times (Duration.milliseconds 16) force)
-                                                    (Axis3d.reverse axis |> Axis3d.direction)
-                                                    (Axis3d.originPoint axis)
+                                                        force =
+                                                            Quantity.interpolateFrom
+                                                                (Force.newtons 10)
+                                                                (Force.newtons 60)
+                                                                (shootingStrength duration)
+                                                    in
+                                                    Body.applyImpulse
+                                                        (Quantity.times (Duration.milliseconds 16) force)
+                                                        (Axis3d.reverse axis |> Axis3d.direction)
+                                                        (Axis3d.originPoint axis)
+                                                        b
+
+                                                else
                                                     b
+                                            )
+                                            model.world
+                                }
 
-                                            else
-                                                b
-                                        )
-                                        model.world
-                            }
+                            Nothing ->
+                                model
 
-                        Nothing ->
-                            model
+                    else
+                        { model | state = Playing { playingState | shootButton = Nothing } }
 
                 _ ->
                     model
