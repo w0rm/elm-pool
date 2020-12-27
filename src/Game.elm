@@ -118,15 +118,17 @@ initialPlacingBallState fn pool =
 
 
 type alias SimulatingState =
-    { events : List ( Time.Posix, ShotEvent )
+    { cueBallPosition : Point3d Meters WorldCoordinates
+    , events : List ( Time.Posix, ShotEvent )
     , pool : Pool AwaitingNextShot
     }
 
 
-initialSimulatingState : Pool AwaitingNextShot -> State
-initialSimulatingState pool =
+initialSimulatingState : Point3d Meters WorldCoordinates -> Pool AwaitingNextShot -> State
+initialSimulatingState cueBallPosition pool =
     Simulating
-        { pool = pool
+        { cueBallPosition = cueBallPosition
+        , pool = pool
         , events = []
         }
 
@@ -171,6 +173,10 @@ camera distance cameraAzimuth cameraElevation state =
                 Playing { cueBallPosition } ->
                     cueBallPosition
 
+                Simulating { cueBallPosition } ->
+                    -- TODO: animate to Point3d.origin
+                    cueBallPosition
+
                 _ ->
                     Point3d.origin
     in
@@ -185,15 +191,6 @@ camera distance cameraAzimuth cameraElevation state =
                 }
         , verticalFieldOfView = Angle.degrees 24
         }
-
-
-cuePosition : World Id -> Point3d Meters WorldCoordinates
-cuePosition world =
-    World.bodies world
-        |> List.filter (\b -> Body.data b == CueBall)
-        |> List.head
-        |> Maybe.map (\b -> Point3d.placeIn (Body.frame b) (Body.centerOfMass b))
-        |> Maybe.withDefault Point3d.origin
 
 
 ray : Model -> Point2d Pixels ScreenCoordinates -> Axis3d Meters WorldCoordinates
@@ -644,17 +641,25 @@ update msg model =
                                 }
                     }
 
-                Simulating { events, pool } ->
+                Simulating simulatingState ->
                     if ballsStoppedMoving newModel.world then
-                        case EightBall.playerShot (List.reverse events) pool of
+                        case EightBall.playerShot (List.reverse simulatingState.events) simulatingState.pool of
                             PlayersFault newPool ->
                                 { newModel
                                     | state = initialPlacingBallState PlacingBallInHand newPool
                                 }
 
                             NextShot newPool ->
+                                let
+                                    cuePosition =
+                                        World.bodies newModel.world
+                                            |> List.filter (\b -> Body.data b == CueBall)
+                                            |> List.head
+                                            |> Maybe.map (\b -> Frame3d.originPoint (Body.frame b))
+                                            |> Maybe.withDefault Point3d.origin
+                                in
                                 { newModel
-                                    | state = initialPlayingState (cuePosition newModel.world) newPool
+                                    | state = initialPlayingState cuePosition newPool
                                 }
 
                             EightBall.GameOver newPool { winner } ->
@@ -668,10 +673,13 @@ update msg model =
                     else
                         let
                             ( newWorld, newEvents ) =
-                                simulateWithEvents 2 time newModel.world events
+                                simulateWithEvents 2 time newModel.world simulatingState.events
+
+                            newSimulatingState =
+                                { simulatingState | events = newEvents }
                         in
                         { newModel
-                            | state = Simulating { events = newEvents, pool = pool }
+                            | state = Simulating newSimulatingState
                             , world = newWorld
                         }
 
@@ -893,7 +901,7 @@ update msg model =
                     case playingState.shootButton of
                         Just duration ->
                             { model
-                                | state = initialSimulatingState playingState.pool
+                                | state = initialSimulatingState playingState.cueBallPosition playingState.pool
                                 , world =
                                     World.update
                                         (\b ->
