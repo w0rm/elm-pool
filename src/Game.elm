@@ -51,7 +51,6 @@ type alias Model =
     , roughnessTexture : Material.Texture Float
     , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
     , distance : Length
-    , focalPoint : Point3d Meters WorldCoordinates
     , cameraAzimuth : Angle
     , cameraElevation : Angle
     , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
@@ -70,6 +69,7 @@ type State
 
 type alias PlayingState =
     { pool : Pool AwaitingNextShot
+    , cueBallPosition : Point3d Meters WorldCoordinates
     , cueElevation : Angle
     , hitElevation : Angle
     , hitRelativeAzimuth : Angle
@@ -84,10 +84,11 @@ type PlayingMouse
     | NothingMeaningful
 
 
-initialPlayingState : Pool AwaitingNextShot -> State
-initialPlayingState pool =
+initialPlayingState : Point3d Meters WorldCoordinates -> Pool AwaitingNextShot -> State
+initialPlayingState cueBallPosition pool =
     Playing
         { pool = pool
+        , cueBallPosition = cueBallPosition
         , cueElevation = Angle.degrees 5
         , hitRelativeAzimuth = Angle.degrees 0
         , hitElevation = Angle.degrees 0
@@ -141,7 +142,6 @@ initial ballTextures roughnessTexture ( width, height ) =
     , time = time
     , dimensions = ( Pixels.float width, Pixels.float height )
     , distance = Length.meters 4
-    , focalPoint = Point3d.origin
     , cameraAzimuth = Angle.degrees -25
     , cameraElevation = Angle.degrees 30
     , orbiting = Nothing
@@ -149,8 +149,17 @@ initial ballTextures roughnessTexture ( width, height ) =
     }
 
 
-camera : Length -> Angle -> Angle -> Point3d Meters WorldCoordinates -> Camera3d Meters WorldCoordinates
-camera distance cameraAzimuth cameraElevation focalPoint =
+camera : Length -> Angle -> Angle -> State -> Camera3d Meters WorldCoordinates
+camera distance cameraAzimuth cameraElevation state =
+    let
+        focalPoint =
+            case state of
+                Playing { cueBallPosition } ->
+                    cueBallPosition
+
+                _ ->
+                    Point3d.origin
+    in
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.orbit
@@ -174,9 +183,9 @@ cuePosition world =
 
 
 ray : Model -> Point2d Pixels ScreenCoordinates -> Axis3d Meters WorldCoordinates
-ray { dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } =
+ray { dimensions, distance, cameraAzimuth, cameraElevation, state } =
     Camera3d.ray
-        (camera distance cameraAzimuth cameraElevation focalPoint)
+        (camera distance cameraAzimuth cameraElevation state)
         (Rectangle2d.with
             { x1 = pixels 0
             , y1 = Tuple.second dimensions
@@ -187,7 +196,7 @@ ray { dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } =
 
 
 view : Model -> Html Msg
-view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimuth, cameraElevation, focalPoint } as model) =
+view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimuth, cameraElevation } as model) =
     let
         dimensionsInt =
             Tuple.mapBoth Quantity.round Quantity.round dimensions
@@ -285,7 +294,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
         [ Scene3d.custom
             { dimensions = dimensionsInt
             , antialiasing = Scene3d.noAntialiasing
-            , camera = camera distance cameraAzimuth cameraElevation focalPoint
+            , camera = camera distance cameraAzimuth cameraElevation model.state
             , entities = entitiesWithUI
             , lights = Scene3d.twoLights environmentalLighting sunlight
             , exposure = Scene3d.exposureValue 13
@@ -627,13 +636,11 @@ update msg model =
                             PlayersFault newPool ->
                                 { newModel
                                     | state = initialPlacingBallState PlacingBallInHand newPool
-                                    , focalPoint = Point3d.origin
                                 }
 
                             NextShot newPool ->
                                 { newModel
-                                    | state = initialPlayingState newPool
-                                    , focalPoint = cuePosition newModel.world
+                                    | state = initialPlayingState (cuePosition newModel.world) newPool
                                 }
 
                             EightBall.GameOver newPool { winner } ->
@@ -674,8 +681,7 @@ update msg model =
                     case canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world of
                         CanSpawnAt position ->
                             { model
-                                | focalPoint = position
-                                , state = initialPlayingState (EightBall.ballPlacedInHand model.time pool)
+                                | state = initialPlayingState position (EightBall.ballPlacedInHand model.time pool)
                                 , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                             }
 
@@ -689,8 +695,7 @@ update msg model =
                     case canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world of
                         CanSpawnAt position ->
                             { model
-                                | focalPoint = position
-                                , state = initialPlayingState (EightBall.ballPlacedBehindHeadString model.time pool)
+                                | state = initialPlayingState position (EightBall.ballPlacedBehindHeadString model.time pool)
                                 , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                             }
 
@@ -875,7 +880,6 @@ update msg model =
                         Just duration ->
                             { model
                                 | state = Simulating [] playingState.pool
-                                , focalPoint = Point3d.origin
                                 , world =
                                     World.update
                                         (\b ->
