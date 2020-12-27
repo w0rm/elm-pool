@@ -62,7 +62,7 @@ type alias Model =
 type State
     = PlacingBehindHeadString (PlacingBallState AwaitingPlaceBallBehindHeadstring)
     | Playing PlayingState
-    | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingNextShot)
+    | Simulating SimulatingState
     | PlacingBallInHand (PlacingBallState AwaitingBallInHand)
     | GameOver (EightBall.Pool AwaitingNewGame) Int
 
@@ -114,6 +114,20 @@ initialPlacingBallState fn pool =
     fn
         { pool = pool
         , mouse = HoveringOuside
+        }
+
+
+type alias SimulatingState =
+    { events : List ( Time.Posix, ShotEvent )
+    , pool : Pool AwaitingNextShot
+    }
+
+
+initialSimulatingState : Pool AwaitingNextShot -> State
+initialSimulatingState pool =
+    Simulating
+        { pool = pool
+        , events = []
         }
 
 
@@ -274,7 +288,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                         _ ->
                             "default"
 
-                Simulating _ _ ->
+                Simulating _ ->
                     "wait"
 
                 _ ->
@@ -308,8 +322,8 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
         ]
 
 
-cueAxis : Model -> PlayingState -> Axis3d Meters WorldCoordinates
-cueAxis { cameraAzimuth, world } { hitRelativeAzimuth, cueElevation, hitElevation } =
+cueAxis : PlayingState -> Angle -> Axis3d Meters WorldCoordinates
+cueAxis { hitRelativeAzimuth, cueElevation, cueBallPosition, hitElevation } cameraAzimuth =
     let
         hitAzimuth =
             cameraAzimuth
@@ -319,7 +333,7 @@ cueAxis { cameraAzimuth, world } { hitRelativeAzimuth, cueElevation, hitElevatio
             Direction3d.xyZ hitAzimuth hitElevation
 
         point =
-            cuePosition world
+            cueBallPosition
                 |> Point3d.translateIn pointDirection (Length.millimeters (57.15 / 2))
 
         axisDirection =
@@ -357,7 +371,7 @@ playingEntities : Model -> PlayingState -> Scene3d.Entity WorldCoordinates
 playingEntities model playingState =
     let
         axis =
-            cueAxis model playingState
+            cueAxis playingState model.cameraAzimuth
 
         maybeCylinder =
             Cylinder3d.from
@@ -520,7 +534,7 @@ currentPlayer state =
                 Playing { pool } ->
                     EightBall.currentPlayer pool
 
-                Simulating _ pool ->
+                Simulating { pool } ->
                     EightBall.currentPlayer pool
 
                 PlacingBallInHand { pool } ->
@@ -552,7 +566,7 @@ currentTarget state =
                 Playing { pool } ->
                     EightBall.currentTarget pool
 
-                Simulating _ pool ->
+                Simulating { pool } ->
                     EightBall.currentTarget pool
 
                 PlacingBallInHand { pool } ->
@@ -630,7 +644,7 @@ update msg model =
                                 }
                     }
 
-                Simulating events pool ->
+                Simulating { events, pool } ->
                     if ballsStoppedMoving newModel.world then
                         case EightBall.playerShot (List.reverse events) pool of
                             PlayersFault newPool ->
@@ -657,7 +671,7 @@ update msg model =
                                 simulateWithEvents 2 time newModel.world events
                         in
                         { newModel
-                            | state = Simulating newEvents pool
+                            | state = Simulating { events = newEvents, pool = pool }
                             , world = newWorld
                         }
 
@@ -751,7 +765,7 @@ update msg model =
                         Nothing ->
                             { model | orbiting = Just mouse }
 
-                Simulating _ _ ->
+                Simulating _ ->
                     { model | orbiting = Just mouse }
 
                 GameOver _ _ ->
@@ -879,14 +893,14 @@ update msg model =
                     case playingState.shootButton of
                         Just duration ->
                             { model
-                                | state = Simulating [] playingState.pool
+                                | state = initialSimulatingState playingState.pool
                                 , world =
                                     World.update
                                         (\b ->
                                             if Body.data b == CueBall then
                                                 let
                                                     axis =
-                                                        cueAxis model playingState
+                                                        cueAxis playingState model.cameraAzimuth
 
                                                     force =
                                                         Quantity.interpolateFrom
@@ -894,7 +908,6 @@ update msg model =
                                                             (Force.newtons 60)
                                                             (shootingStrength duration)
                                                 in
-                                                -- TODO use the duration from the Pressed state to calculate the force
                                                 Body.applyImpulse
                                                     (Quantity.times (Duration.milliseconds 16) force)
                                                     (Axis3d.reverse axis |> Axis3d.direction)
