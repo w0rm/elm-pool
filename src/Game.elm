@@ -395,13 +395,6 @@ playingEntities playingState camera3d cameraAzimuth =
                                 |> Quantity.minus (Length.meters 0.1)
                     in
                     if Quantity.lessThanOrEqualTo cueMaxDistance distanceFromCamera then
-                        let
-                            angle =
-                                Direction3d.angleFrom (Viewpoint3d.viewDirection viewpoint) (Axis3d.direction axis)
-
-                            delta =
-                                Quantity.multiplyBy -(tan (Angle.inRadians angle)) cueRadius
-                        in
                         distanceFromCamera
 
                     else
