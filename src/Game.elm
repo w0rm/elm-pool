@@ -38,7 +38,7 @@ import Speed
 import Time exposing (Posix)
 import Vector2d
 import Vector3d
-import Viewpoint3d
+import Viewpoint3d exposing (Viewpoint3d)
 
 
 type ScreenCoordinates
@@ -227,6 +227,9 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                 , intensityBelow = Illuminance.lux 0
                 }
 
+        camera3d =
+            camera distance cameraAzimuth cameraElevation model.state
+
         bodies =
             case model.state of
                 PlacingBehindHeadString _ ->
@@ -253,7 +256,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                     placingBallEntities mouse Scene3d.nothing :: entities
 
                 Playing playingState ->
-                    playingEntities model playingState :: entities
+                    playingEntities playingState camera3d model.cameraAzimuth :: entities
 
                 _ ->
                     entities
@@ -305,7 +308,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
         [ Scene3d.custom
             { dimensions = dimensionsInt
             , antialiasing = Scene3d.noAntialiasing
-            , camera = camera distance cameraAzimuth cameraElevation model.state
+            , camera = camera3d
             , entities = entitiesWithUI
             , lights = Scene3d.twoLights environmentalLighting sunlight
             , exposure = Scene3d.exposureValue 13
@@ -364,17 +367,54 @@ placingBallEntities placingBall areaEntity =
             Scene3d.nothing
 
 
-playingEntities : Model -> PlayingState -> Scene3d.Entity WorldCoordinates
-playingEntities model playingState =
+playingEntities : PlayingState -> Camera3d Meters WorldCoordinates -> Angle -> Scene3d.Entity WorldCoordinates
+playingEntities playingState camera3d cameraAzimuth =
     let
         axis =
-            cueAxis playingState model.cameraAzimuth
+            cueAxis playingState cameraAzimuth
+
+        viewpoint =
+            Camera3d.viewpoint camera3d
+
+        viewPlane =
+            SketchPlane3d.toPlane (Viewpoint3d.viewPlane viewpoint)
+
+        cueMaxDistance =
+            Length.centimeters (2 + 150)
+
+        cueRadius =
+            Length.millimeters 6
+
+        cueDistance =
+            case Axis3d.intersectionWithPlane viewPlane axis of
+                Just point ->
+                    let
+                        distanceFromCamera =
+                            Point3d.distanceFrom (Axis3d.originPoint axis) point
+                                --minus the clipDepth
+                                |> Quantity.minus (Length.meters 0.1)
+                    in
+                    if Quantity.lessThanOrEqualTo cueMaxDistance distanceFromCamera then
+                        let
+                            angle =
+                                Direction3d.angleFrom (Viewpoint3d.viewDirection viewpoint) (Axis3d.direction axis)
+
+                            delta =
+                                Quantity.multiplyBy -(tan (Angle.inRadians angle)) cueRadius
+                        in
+                        distanceFromCamera
+
+                    else
+                        cueMaxDistance
+
+                Nothing ->
+                    cueMaxDistance
 
         maybeCylinder =
             Cylinder3d.from
                 (Point3d.along axis (Length.centimeters 2))
-                (Point3d.along axis (Length.centimeters (2 + 150)))
-                (Length.millimeters 6)
+                (Point3d.along axis cueDistance)
+                cueRadius
     in
     case maybeCylinder of
         Just cylinder ->
