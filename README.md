@@ -22,7 +22,7 @@ Physically simulated pool game. Work in progress.
   2. The camera angle defines the azimuth of the cue ✅
   3. Click and hold on the cue ball to set the hit point, move cursor while pressed to set the cue elevation ✅
   4. The cue is rendered in red if it overlaps with other objects
-  5. Press and hold the "Space" button to set the force
+  5. Press and hold the "Space" button to set the force ✅
   6. Release the "Space" button to shoot ✅
 
 - Simulating
