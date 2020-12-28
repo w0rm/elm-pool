@@ -365,7 +365,7 @@ tableWalls =
     Body.compound (List.map Physics.Shape.block wallsBlocks) Walls
         |> Body.withMaterial
             (Physics.Material.custom
-                { friction = 0.3
-                , bounciness = 0.6
+                { friction = 0.1
+                , bounciness = 0.9
                 }
             )
