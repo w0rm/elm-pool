@@ -928,12 +928,15 @@ update msg model =
                                         { y } =
                                             Vector2d.toPixels (Vector2d.from point mouse)
 
+                                        precision =
+                                            0.2 + model.zoom / 0.8
+
                                         newPlayingState =
                                             { playingState
                                                 | mouse = SettingCueElevation mouse
                                                 , cueElevation =
                                                     playingState.cueElevation
-                                                        |> Quantity.minus (Angle.degrees y)
+                                                        |> Quantity.minus (Angle.degrees (y * precision))
                                                         |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
                                             }
                                     in
