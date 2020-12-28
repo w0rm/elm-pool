@@ -864,7 +864,7 @@ update msg model =
                     { model | orbiting = Just mouse }
 
                 GameOver _ _ ->
-                    model
+                    { model | orbiting = Just mouse }
 
         MouseMove mouse ->
             case model.orbiting of
