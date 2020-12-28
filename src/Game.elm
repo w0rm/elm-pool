@@ -18,7 +18,7 @@ import Html.Attributes
 import Html.Events
 import Illuminance
 import Json.Decode
-import Length exposing (Length, Meters)
+import Length exposing (Meters)
 import List
 import Physics.Body as Body
 import Physics.Contact as Contact
@@ -39,7 +39,7 @@ import Speed
 import Time exposing (Posix)
 import Vector2d
 import Vector3d
-import Viewpoint3d exposing (Viewpoint3d)
+import Viewpoint3d
 
 
 type ScreenCoordinates
@@ -51,7 +51,7 @@ type alias Model =
     , ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Material.Texture Float
     , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
-    , distance : Length
+    , zoom : Float -- 0 to 1
     , cameraAzimuth : Angle
     , cameraElevation : Angle
     , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
@@ -158,7 +158,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     , roughnessTexture = roughnessTexture
     , time = time
     , dimensions = ( Pixels.float width, Pixels.float height )
-    , distance = Length.meters 4
+    , zoom = 0.9
     , cameraAzimuth = Angle.degrees -25
     , cameraElevation = Angle.degrees 30
     , orbiting = Nothing
@@ -166,8 +166,8 @@ initial ballTextures roughnessTexture ( width, height ) =
     }
 
 
-camera : Length -> Angle -> Angle -> State -> Camera3d Meters WorldCoordinates
-camera distance cameraAzimuth cameraElevation state =
+camera : Float -> Angle -> Angle -> State -> Camera3d Meters WorldCoordinates
+camera zoom cameraAzimuth cameraElevation state =
     let
         focalPoint =
             case state of
@@ -188,16 +188,16 @@ camera distance cameraAzimuth cameraElevation state =
                 , groundPlane = SketchPlane3d.xy
                 , azimuth = cameraAzimuth
                 , elevation = cameraElevation
-                , distance = distance
+                , distance = Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5) zoom
                 }
         , verticalFieldOfView = Angle.degrees 24
         }
 
 
 ray : Model -> Point2d Pixels ScreenCoordinates -> Axis3d Meters WorldCoordinates
-ray { dimensions, distance, cameraAzimuth, cameraElevation, state } =
+ray { dimensions, zoom, cameraAzimuth, cameraElevation, state } =
     Camera3d.ray
-        (camera distance cameraAzimuth cameraElevation state)
+        (camera zoom cameraAzimuth cameraElevation state)
         (Rectangle2d.with
             { x1 = pixels 0
             , y1 = Tuple.second dimensions
@@ -208,7 +208,7 @@ ray { dimensions, distance, cameraAzimuth, cameraElevation, state } =
 
 
 view : Model -> Html Msg
-view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimuth, cameraElevation } as model) =
+view ({ world, ballTextures, roughnessTexture, dimensions, zoom, cameraAzimuth, cameraElevation } as model) =
     let
         dimensionsInt =
             Tuple.mapBoth Quantity.round Quantity.round dimensions
@@ -229,7 +229,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, distance, cameraAzimu
                 }
 
         camera3d =
-            camera distance cameraAzimuth cameraElevation model.state
+            camera zoom cameraAzimuth cameraElevation model.state
 
         bodies =
             case model.state of
@@ -782,12 +782,7 @@ update msg model =
             { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
 
         MouseWheel deltaY ->
-            { model
-                | distance =
-                    model.distance
-                        |> Quantity.minus (Length.meters (deltaY * 0.01))
-                        |> Quantity.clamp (Length.meters 0.5) (Length.meters 5)
-            }
+            { model | zoom = clamp 0 1 (model.zoom - deltaY * 0.002) }
 
         MouseDown mouse ->
             case model.state of
@@ -878,14 +873,24 @@ update msg model =
                         { x, y } =
                             Vector2d.toPixels (Vector2d.from from mouse)
 
+                        -- 0.2 to 1
+                        orbitingPrecision =
+                            0.2 + model.zoom / 0.8
+
+                        deltaAzimuth =
+                            x * orbitingPrecision
+
+                        deltaElevation =
+                            y * orbitingPrecision
+
                         cameraAzimuth =
                             model.cameraAzimuth
-                                |> Quantity.minus (Angle.degrees x)
+                                |> Quantity.minus (Angle.degrees deltaAzimuth)
                                 |> Angle.normalize
 
                         cameraElevation =
                             model.cameraElevation
-                                |> Quantity.plus (Angle.degrees y)
+                                |> Quantity.plus (Angle.degrees deltaElevation)
                                 |> Quantity.clamp
                                     (Angle.degrees 6)
                                     (Angle.degrees 90)
