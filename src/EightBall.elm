@@ -5,7 +5,7 @@ module EightBall exposing
     , rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
     , ShotEvent
     , cueHitBall, ballFellInPocket, scratch
-    , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
+    , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
     , WhatHappened(..)
     )
 
@@ -46,7 +46,7 @@ module EightBall exposing
 
 ## Balls
 
-@docs Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall
+@docs Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
 
 
 ## Ruling
@@ -55,7 +55,6 @@ module EightBall exposing
 
 -}
 
-import Set
 import Time
 
 
@@ -266,6 +265,11 @@ numberedBall number =
 
     else
         Nothing
+
+
+ballNumber : Ball -> Int
+ballNumber (Ball n _) =
+    n
 
 
 
