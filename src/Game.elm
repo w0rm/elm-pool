@@ -22,7 +22,7 @@ import Json.Decode
 import Length exposing (Meters)
 import List
 import Physics.Body as Body
-import Physics.Contact as Contact
+import Physics.Contact as Contact exposing (Contact)
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
@@ -35,6 +35,7 @@ import Rectangle3d exposing (Rectangle3d, dimensions)
 import Scene3d
 import Scene3d.Light
 import Scene3d.Material as Material
+import Set exposing (Set)
 import SketchPlane3d
 import Speed
 import Time exposing (Posix)
@@ -128,6 +129,7 @@ initialPlacingBallState fn pool =
 type alias SimulatingState =
     { events : List ( Time.Posix, ShotEvent )
     , pool : Pool AwaitingNextShot
+    , active : Set Int -- activated balls (after they are touched)
     }
 
 
@@ -136,6 +138,7 @@ initialSimulatingState pool =
     Simulating
         { pool = pool
         , events = []
+        , active = Set.empty
         }
 
 
@@ -821,11 +824,11 @@ update msg model =
 
                     else
                         let
-                            ( newWorld, newEvents ) =
-                                simulateWithEvents 2 time newModel.world simulatingState.events
+                            ( newWorld, newActive, newEvents ) =
+                                simulateWithEvents 2 time newModel.world simulatingState.active simulatingState.events
 
                             newSimulatingState =
-                                { simulatingState | events = newEvents }
+                                { simulatingState | events = newEvents, active = newActive }
                         in
                         { newModel
                             | state = Simulating newSimulatingState
@@ -1115,7 +1118,7 @@ update msg model =
                                     , cameraTimeline =
                                         Animator.go Animator.verySlowly
                                             { cameraSettings
-                                                | zoom = 0.9
+                                                | zoom = 1
                                                 , elevation = Angle.degrees 50
                                             }
                                             model.cameraTimeline
@@ -1218,13 +1221,24 @@ canSpawnHere mouseRay area world =
         HoveringOuside
 
 
-simulateWithEvents : Int -> Time.Posix -> World Id -> List ( Time.Posix, ShotEvent ) -> ( World Id, List ( Time.Posix, ShotEvent ) )
-simulateWithEvents frame time world events =
+activateBalls : List (Contact Id) -> Set Int -> Set Int
+activateBalls contacts active =
+    active
+
+
+simulateWithEvents : Int -> Time.Posix -> World Id -> Set Int -> List ( Time.Posix, ShotEvent ) -> ( World Id, Set Int, List ( Time.Posix, ShotEvent ) )
+simulateWithEvents frame time world active events =
     if frame > 0 then
         let
             simulatedWorld =
                 -- Simulate at shorter interval to prevent tunneling
                 World.simulate (seconds (1 / 120)) world
+
+            contacts =
+                World.contacts simulatedWorld
+
+            newActive =
+                activateBalls contacts active
 
             ( newEvents, newWorld ) =
                 List.foldl
@@ -1271,12 +1285,12 @@ simulateWithEvents frame time world events =
                                 ( currentEvents, currentWorld )
                     )
                     ( events, simulatedWorld )
-                    (World.contacts simulatedWorld)
+                    contacts
         in
-        simulateWithEvents (frame - 1) time newWorld newEvents
+        simulateWithEvents (frame - 1) time newWorld newActive newEvents
 
     else
-        ( world, events )
+        ( world, active, events )
 
 
 intersectionWithRectangle : Axis3d units coordinates -> Rectangle3d units coordinates -> Maybe (Point3d units coordinates)
