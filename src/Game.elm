@@ -739,6 +739,7 @@ update msg model =
                             PlayersFault newPool ->
                                 { newModel
                                     | state = initialPlacingBallState PlacingBallInHand newPool
+                                    , world = World.keepIf (\b -> Body.data b /= CueBall) newModel.world
                                 }
 
                             NextShot newPool ->
