@@ -366,6 +366,6 @@ tableWalls =
         |> Body.withMaterial
             (Physics.Material.custom
                 { friction = 0.1
-                , bounciness = 0.9
+                , bounciness = 0.8
                 }
             )
