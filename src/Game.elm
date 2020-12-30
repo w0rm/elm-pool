@@ -1221,9 +1221,64 @@ canSpawnHere mouseRay area world =
         HoveringOuside
 
 
-activateBalls : List (Contact Id) -> Set Int -> Set Int
-activateBalls contacts active =
-    active
+{-| We only need to record events from balls that were hit by the cue ball,
+or balls that were hit by the balls that were hit by the cue ball.
+
+This is needed to skip some initially colliding things, e.g.
+we are not interested in initial collisions between a ball and a wall at
+the start of simulation. Something needs to hit that ball before it hits the wall.
+
+-}
+activateBalls : Bool -> List (Contact Id) -> List (Contact Id) -> Set Int -> Set Int
+activateBalls changed contacts filteredContacts active =
+    case contacts of
+        contact :: remainingContacts ->
+            let
+                ( b1, b2 ) =
+                    Contact.bodies contact
+
+                activated =
+                    case ( Body.data b1, Body.data b2 ) of
+                        ( CueBall, Numbered ball ) ->
+                            Just ball
+
+                        ( Numbered ball, CueBall ) ->
+                            Just ball
+
+                        ( Numbered ball1, Numbered ball2 ) ->
+                            if Set.member (EightBall.ballNumber ball1) active then
+                                Just ball2
+
+                            else if Set.member (EightBall.ballNumber ball1) active then
+                                Just ball1
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+            in
+            case activated of
+                Just ball ->
+                    activateBalls True
+                        remainingContacts
+                        filteredContacts
+                        (Set.insert (EightBall.ballNumber ball) active)
+
+                Nothing ->
+                    activateBalls changed
+                        remainingContacts
+                        (contact :: filteredContacts)
+                        active
+
+        [] ->
+            -- reque the contacts and loop until the active set doesn't change
+            -- because multiple objects can collide together
+            if changed then
+                activateBalls False filteredContacts [] active
+
+            else
+                active
 
 
 simulateWithEvents : Int -> Time.Posix -> World Id -> Set Int -> List ( Time.Posix, ShotEvent ) -> ( World Id, Set Int, List ( Time.Posix, ShotEvent ) )
@@ -1238,7 +1293,7 @@ simulateWithEvents frame time world active events =
                 World.contacts simulatedWorld
 
             newActive =
-                activateBalls contacts active
+                activateBalls False contacts [] active
 
             ( newEvents, newWorld ) =
                 List.foldl
