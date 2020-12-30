@@ -11,7 +11,7 @@ Physically simulated pool game. Work in progress.
 
 - Placing the cue ball in hand
 
-  1. The focal point is at the center of the table
+  1. The focal point is at the center of the table ✅
   2. Hover over the table to choose where to place the cue ball ✅
   3. The cue ball is rendered in red when it overlaps with other objects ✅
   4. Click to place the cue ball if it is not overlapping with other objects ✅
@@ -27,8 +27,8 @@ Physically simulated pool game. Work in progress.
 
 - Simulating
 
-  1. The focal point is at the center of the table ✅
-  2. The camera is zoomed out to show the table (unless interrupted with the mousewheel)
+  1. The focal point is where it was before ✅
+  2. The camera is zoomed out to show the table (unless interrupted with the mousewheel) ✅
 
 ## Game Rules
 
