@@ -1107,10 +1107,6 @@ update msg model =
                             Just duration ->
                                 { model
                                     | state = initialSimulatingState playingState.pool
-                                    , focalPointTimeline =
-                                        Animator.go Animator.verySlowly
-                                            Point3d.origin
-                                            model.focalPointTimeline
                                     , cameraTimeline =
                                         Animator.go Animator.verySlowly
                                             { cameraSettings
