@@ -584,7 +584,7 @@ playerShot shotEvents (Pool data) =
     case shotEvents of
         [] ->
             -- Assume the cue is struck, but no other balls are hit.
-            NextShot <|
+            PlayersFault <|
                 Pool
                     { data
                         | player = switchPlayer data.player
@@ -783,11 +783,55 @@ ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
             False
 
 
-{-| At the beginning of the shot...
+{-| Check whether the player makes a legal hit.
+
+A legal hit during regular play (after the break) is based on the target ball group:
+
+  - Open table: the first ball hit by the cue can be either a solid or a stripe, but not the 8-ball.
+  - Solid group: the first ball hit by the cue must be in the solid group.
+  - Stripe group: the first ball hit by the cue must be in the stripe group.
+  - Eight ball: the first ball hit by the cue must be the 8-ball.
+
 -}
-isValidHit : List ( Time.Posix, ShotEvent ) -> PoolData -> Bool
-isValidHit shotEvents poolData =
-    True
+isLegalHit : List ( Time.Posix, ShotEvent ) -> CurrentTarget -> Bool
+isLegalHit shotEvents previousTarget =
+    let
+        firstBallHitInGroup =
+            firstBallHitGroup shotEvents
+    in
+    case
+        ( previousTarget, firstBallHitInGroup )
+    of
+        ( OpenTable, Just SolidGroup ) ->
+            True
+
+        ( OpenTable, Just StripeGroup ) ->
+            True
+
+        ( Solids, Just SolidGroup ) ->
+            True
+
+        ( Stripes, Just StripeGroup ) ->
+            True
+
+        ( EightBall, Just EightGroup ) ->
+            True
+
+        _ ->
+            False
+
+
+firstBallHitGroup : List ( Time.Posix, ShotEvent ) -> Maybe BallGroup
+firstBallHitGroup shotEvents =
+    case shotEvents of
+        [] ->
+            Nothing
+
+        ( _, CueHitBall ball ) :: otherShotEvents ->
+            Just (ballGroup ball)
+
+        firstShotEvent :: otherShotEvents ->
+            firstBallHitGroup otherShotEvents
 
 
 checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> CurrentTarget -> PoolData -> WhatHappened
@@ -798,7 +842,7 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                 -- TODO: Combine case into tuple with new type `Scratched | NotScratched`.
                 let
                     winningPlayer =
-                        if ballPocketedEvents.scratched then
+                        if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
                             switchPlayer poolData.player
 
                         else
@@ -810,13 +854,14 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                 -- If the player wasn't targeting the 8-ball, then they lose!
                 gameOver (switchPlayer poolData.player) poolData
 
-    else if ballPocketedEvents.scratched then
+    else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
         PlayersFault
             (Pool
                 { poolData
                     | player = switchPlayer poolData.player
 
-                    -- TODO: Log Scratched internal event.
+                    -- TODO: Log Scratched/PlayersFault internal event.
+                    -- Should these be two separate events?
                 }
             )
 
