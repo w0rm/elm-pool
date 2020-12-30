@@ -1154,11 +1154,19 @@ simulateWithEvents frame time world events =
                                 )
 
                             --(Numbered _, Numbered _) ->
-                            --    (EightBall.twoBallsCollided time, currentWorld)
-                            --( Walls, Numbered _ ) ->
-                            --    (EightBall.ballTouchedTheWall time, currentWorld)
-                            --( Numbered _, Walls ) ->
-                            --    (EightBall.ballTouchedTheWall time, currentWorld)
+                            --    (EightBall.ballsCollided time, currentWorld)
+                            ( Walls, Numbered ball ) ->
+                                ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+
+                            ( Numbered ball, Walls ) ->
+                                ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+
+                            ( Walls, CueBall ) ->
+                                ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+
+                            ( CueBall, Walls ) ->
+                                ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+
                             _ ->
                                 ( currentEvents, currentWorld )
                     )

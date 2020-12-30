@@ -135,6 +135,7 @@ suite =
                                     |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 0) EightBall.twoBall
+                                        , EightBall.ballHitWall (Time.millisToPosix 1) EightBall.twoBall
                                         ]
                         in
                         case nextAction of
@@ -746,6 +747,82 @@ suite =
                         in
                         case nextAction of
                             EightBall.PlayersFault pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "if player hits a ball in their target group but does not hit a wall after, the other player gets ball-in-hand"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+
+                                        -- No wall hit.
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "if player hits a ball in their target group and then the target hits a wall after, the other player does not get ball-in-hand"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballHitWall (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "if player hits a ball in their target group and then the cue ball hits a wall after, the other player does not get ball-in-hand"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.cueHitWall (Time.millisToPosix 1)
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.NextShot pool ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal 1
