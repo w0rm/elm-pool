@@ -448,13 +448,18 @@ placingBallEntities placingBall areaEntity =
             Scene3d.group
                 [ areaEntity
                 , Scene3d.sphereWithShadow
-                    (Material.matte (Color.rgb255 255 150 150))
+                    (Material.matte inactiveColor)
                     Bodies.ballSphere
                     |> Scene3d.placeIn (Frame3d.atPoint position)
                 ]
 
         HoveringOuside ->
             Scene3d.nothing
+
+
+inactiveColor : Color
+inactiveColor =
+    Color.rgb255 130 130 130
 
 
 playingEntities : World Id -> PlayingState -> Camera3d Meters WorldCoordinates -> Angle -> Scene3d.Entity WorldCoordinates
@@ -508,7 +513,7 @@ playingEntities world playingState camera3d cameraAzimuth =
                             Color.rgb255 255 255 255
 
                         else
-                            Color.rgb255 255 150 150
+                            inactiveColor
                     , roughness = 0.6
                     }
                 )
