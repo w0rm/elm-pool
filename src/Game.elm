@@ -129,7 +129,6 @@ initialPlacingBallState fn pool =
 type alias SimulatingState =
     { events : List ( Time.Posix, ShotEvent )
     , pool : Pool AwaitingNextShot
-    , active : Set Int -- activated balls (after they are touched)
     }
 
 
@@ -138,7 +137,6 @@ initialSimulatingState pool =
     Simulating
         { pool = pool
         , events = []
-        , active = Set.empty
         }
 
 
@@ -824,11 +822,11 @@ update msg model =
 
                     else
                         let
-                            ( newWorld, newActive, newEvents ) =
-                                simulateWithEvents 2 time newModel.world simulatingState.active simulatingState.events
+                            ( newWorld, newEvents ) =
+                                simulateWithEvents 2 time newModel.world simulatingState.events
 
                             newSimulatingState =
-                                { simulatingState | events = newEvents, active = newActive }
+                                { simulatingState | events = newEvents }
                         in
                         { newModel
                             | state = Simulating newSimulatingState
@@ -1221,79 +1219,44 @@ canSpawnHere mouseRay area world =
         HoveringOuside
 
 
-{-| We only need to record events from balls that were hit by the cue ball,
-or balls that were hit by the balls that were hit by the cue ball.
-
-This is needed to skip some initially colliding things, e.g.
-we are not interested in initial collisions between a ball and a wall at
-the start of simulation. Something needs to hit that ball before it hits the wall.
-
+{-| Find the frozen balls, that are touching the walls
 -}
-activateBalls : Bool -> List (Contact Id) -> List (Contact Id) -> Set Int -> Set Int
-activateBalls changed contacts filteredContacts active =
-    case contacts of
-        contact :: remainingContacts ->
+frozenBalls : World Id -> Set Int
+frozenBalls world =
+    List.foldl
+        (\contact frozen ->
             let
                 ( b1, b2 ) =
                     Contact.bodies contact
-
-                activated =
-                    case ( Body.data b1, Body.data b2 ) of
-                        ( CueBall, Numbered ball ) ->
-                            Just ball
-
-                        ( Numbered ball, CueBall ) ->
-                            Just ball
-
-                        ( Numbered ball1, Numbered ball2 ) ->
-                            if Set.member (EightBall.ballNumber ball1) active then
-                                Just ball2
-
-                            else if Set.member (EightBall.ballNumber ball1) active then
-                                Just ball1
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
             in
-            case activated of
-                Just ball ->
-                    activateBalls True
-                        remainingContacts
-                        filteredContacts
-                        (Set.insert (EightBall.ballNumber ball) active)
+            case ( Body.data b1, Body.data b2 ) of
+                ( Walls, Numbered ball ) ->
+                    Set.insert (EightBall.ballNumber ball) frozen
 
-                Nothing ->
-                    activateBalls changed
-                        remainingContacts
-                        (contact :: filteredContacts)
-                        active
+                ( Numbered ball, Walls ) ->
+                    Set.insert (EightBall.ballNumber ball) frozen
 
-        [] ->
-            -- reque the contacts and loop until the active set doesn't change
-            -- because multiple objects can collide together
-            if changed then
-                activateBalls False filteredContacts [] active
-
-            else
-                active
+                _ ->
+                    frozen
+        )
+        Set.empty
+        (World.contacts world)
 
 
-simulateWithEvents : Int -> Time.Posix -> World Id -> Set Int -> List ( Time.Posix, ShotEvent ) -> ( World Id, Set Int, List ( Time.Posix, ShotEvent ) )
-simulateWithEvents frame time world active events =
+simulateWithEvents : Int -> Time.Posix -> World Id -> List ( Time.Posix, ShotEvent ) -> ( World Id, List ( Time.Posix, ShotEvent ) )
+simulateWithEvents frame time world events =
     if frame > 0 then
         let
+            frozen =
+                -- Frozen balls from before the simulation
+                frozenBalls world
+
             simulatedWorld =
                 -- Simulate at shorter interval to prevent tunneling
                 World.simulate (seconds (1 / 120)) world
 
             contacts =
                 World.contacts simulatedWorld
-
-            newActive =
-                activateBalls False contacts [] active
 
             ( newEvents, newWorld ) =
                 List.foldl
@@ -1342,10 +1305,10 @@ simulateWithEvents frame time world active events =
                     ( events, simulatedWorld )
                     contacts
         in
-        simulateWithEvents (frame - 1) time newWorld newActive newEvents
+        simulateWithEvents (frame - 1) time newWorld newEvents
 
     else
-        ( world, active, events )
+        ( world, events )
 
 
 intersectionWithRectangle : Axis3d units coordinates -> Rectangle3d units coordinates -> Maybe (Point3d units coordinates)
