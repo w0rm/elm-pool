@@ -782,6 +782,16 @@ update msg model =
                 Simulating simulatingState ->
                     if ballsStoppedMoving newModel.world then
                         case EightBall.playerShot (List.reverse simulatingState.events) simulatingState.pool of
+                            IllegalBreak newPool ->
+                                { newModel
+                                    | world = Bodies.world -- Reset the table.
+                                    , state = initialPlacingBallState PlacingBehindHeadString (EightBall.rack time newPool)
+                                    , focalPointTimeline =
+                                        Animator.go Animator.quickly
+                                            Point3d.origin
+                                            newModel.focalPointTimeline
+                                }
+
                             PlayersFault newPool ->
                                 { newModel
                                     | state = initialPlacingBallState PlacingBallInHand newPool
@@ -818,8 +828,10 @@ update msg model =
                                             newModel.focalPointTimeline
                                 }
 
-                            Error _ ->
-                                Debug.todo "Error"
+                            Error error ->
+                                Debug.todo <|
+                                    "Error: "
+                                        ++ error
 
                     else
                         let
