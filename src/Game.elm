@@ -1244,6 +1244,29 @@ frozenBalls world =
         (World.contacts world)
 
 
+{-| Find out if the cue ball is touching the wall.
+-}
+frozenCueBall : World Id -> Bool
+frozenCueBall world =
+    List.any
+        (\contact ->
+            let
+                ( b1, b2 ) =
+                    Contact.bodies contact
+            in
+            case ( Body.data b1, Body.data b2 ) of
+                ( Walls, CueBall ) ->
+                    True
+
+                ( CueBall, Walls ) ->
+                    True
+
+                _ ->
+                    False
+        )
+        (World.contacts world)
+
+
 simulateWithEvents : Int -> Time.Posix -> World Id -> List ( Time.Posix, ShotEvent ) -> ( World Id, List ( Time.Posix, ShotEvent ) )
 simulateWithEvents frame time world events =
     if frame > 0 then
@@ -1251,6 +1274,10 @@ simulateWithEvents frame time world events =
             frozen =
                 -- Frozen balls from before the simulation
                 frozenBalls world
+
+            frozenCue =
+                -- Frozen cue ball from before the simulation
+                frozenCueBall world
 
             simulatedWorld =
                 -- Simulate at shorter interval to prevent tunneling
@@ -1297,16 +1324,32 @@ simulateWithEvents frame time world events =
                             --(Numbered _, Numbered _) ->
                             --    (EightBall.ballsCollided time, currentWorld)
                             ( Walls, Numbered ball ) ->
-                                ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+                                if not (Set.member (EightBall.ballNumber ball) frozen) then
+                                    ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+
+                                else
+                                    ( currentEvents, currentWorld )
 
                             ( Numbered ball, Walls ) ->
-                                ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+                                if not (Set.member (EightBall.ballNumber ball) frozen) then
+                                    ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+
+                                else
+                                    ( currentEvents, currentWorld )
 
                             ( Walls, CueBall ) ->
-                                ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+                                if not frozenCue then
+                                    ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+
+                                else
+                                    ( currentEvents, currentWorld )
 
                             ( CueBall, Walls ) ->
-                                ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+                                if not frozenCue then
+                                    ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+
+                                else
+                                    ( currentEvents, currentWorld )
 
                             _ ->
                                 ( currentEvents, currentWorld )
