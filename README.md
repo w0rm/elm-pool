@@ -50,7 +50,7 @@ The game format is two (2) player 8-Ball. It is a simplified version of [WPA 8-B
   1. View the current player ✅
   2. Add shot with shot events ✅
   3. Place ball in hand ✅
-  4. Check if shot is legal, that is, if the player has hit their target ball with the cue before any other, and some ball has hit a rail or went into a pocket
+  4. Check if shot is legal, that is, if the player has hit their target ball with the cue before any other, and some ball has hit a rail or went into a pocket ✅
   5. On scratch, require the next player to place the cue ball anywhere on the table (ball-in-hand) ✅
   6. If a player does not pocket one of their balls or scratches, the current player switches ✅
   7. Ensure balls are pocketed only once or send an error
