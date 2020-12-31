@@ -4,7 +4,7 @@ module EightBall exposing
     , CurrentTarget(..), currentTarget
     , rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
     , ShotEvent
-    , cueHitBall, ballFellInPocket, scratch
+    , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
     , WhatHappened(..)
     )
@@ -41,7 +41,7 @@ module EightBall exposing
 ## Shot Events
 
 @docs ShotEvent
-@docs cueHitBall, ballFellInPocket, scratch
+@docs cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
 
 
 ## Balls
@@ -449,10 +449,11 @@ There are a few which should be supported, but are not yet:
 -}
 type ShotEvent
     = --       -- | BallOffTable Ball
-      --       -- | BallToBall Ball Ball (List Ball)
-      --       -- | BallToWall Ball Wall
+      -- BallToBall Ball Ball (List Ball)
       BallToPocket Ball --Pocket
+    | BallToWall Ball -- Wall
     | CueHitBall Ball
+    | CueHitWall
     | Scratch
 
 
@@ -502,14 +503,41 @@ cueHitBall when ball =
     )
 
 
-twoBallsCollided : Time.Posix -> ( Time.Posix, ShotEvent )
-twoBallsCollided =
-    Debug.todo ""
+{-| When the cue ball touches the wall.
+
+Note: once they are touching, there's no need to send this event again unless they are separated and come back into contact.
+
+-}
+cueHitWall : Time.Posix -> ( Time.Posix, ShotEvent )
+cueHitWall when =
+    ( when
+    , CueHitWall
+    )
 
 
-ballTouchedTheWall : Time.Posix -> ( Time.Posix, ShotEvent )
-ballTouchedTheWall =
-    Debug.todo ""
+
+-- {-| When two or more balls contact one another.
+--
+-- Note: once they are touching, there's no need to send this event again unless they are separated and come back into contact.
+--
+-- -}
+-- ballsCollided : Time.Posix -> Ball -> Ball -> List Ball -> ( Time.Posix, ShotEvent )
+-- ballsCollided when ball1 ball2 otherBalls =
+--     ( when
+--     , BallToBall ball1 ball2 otherBalls
+--     )
+
+
+{-| When a ball touches the wall.
+
+Note: once they are touching, there's no need to send this event again unless they are separated and come back into contact.
+
+-}
+ballHitWall : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
+ballHitWall when ball =
+    ( when
+    , BallToWall ball
+    )
 
 
 {-| When a numbered ball is pocketed.
@@ -584,7 +612,7 @@ playerShot shotEvents (Pool data) =
     case shotEvents of
         [] ->
             -- Assume the cue is struck, but no other balls are hit.
-            NextShot <|
+            PlayersFault <|
                 Pool
                     { data
                         | player = switchPlayer data.player
@@ -707,7 +735,13 @@ groupPocketedEvents shotEvents =
                         BallToPocket ball ->
                             True
 
-                        CueHitBall ball ->
+                        BallToWall _ ->
+                            False
+
+                        CueHitBall _ ->
+                            False
+
+                        CueHitWall ->
                             False
 
                         Scratch ->
@@ -719,10 +753,16 @@ groupPocketedEvents shotEvents =
             List.any
                 (\( shotTime, shotEvent ) ->
                     case shotEvent of
-                        BallToPocket ball ->
+                        BallToPocket _ ->
                             False
 
-                        CueHitBall ball ->
+                        BallToWall _ ->
+                            False
+
+                        CueHitBall _ ->
+                            False
+
+                        CueHitWall ->
                             False
 
                         Scratch ->
@@ -776,18 +816,87 @@ ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
         BallToPocket ball ->
             ballGroup ball == ballGroup_
 
+        BallToWall _ ->
+            False
+
         CueHitBall ball ->
+            False
+
+        CueHitWall ->
             False
 
         Scratch ->
             False
 
 
-{-| At the beginning of the shot...
+{-| Check whether the player makes a legal hit.
+
+A legal hit during regular play (after the break) is based on the target ball group:
+
+  - Open table: the first ball hit by the cue can be either a solid or a stripe, but not the 8-ball.
+  - Solid group: the first ball hit by the cue must be in the solid group.
+  - Stripe group: the first ball hit by the cue must be in the stripe group.
+  - Eight ball: the first ball hit by the cue must be the 8-ball.
+
 -}
-isValidHit : List ( Time.Posix, ShotEvent ) -> PoolData -> Bool
-isValidHit shotEvents poolData =
-    True
+isLegalHit : List ( Time.Posix, ShotEvent ) -> CurrentTarget -> Bool
+isLegalHit shotEvents previousTarget =
+    case ( previousTarget, legalFirstBallHitGroup shotEvents ) of
+        ( OpenTable, Just SolidGroup ) ->
+            True
+
+        ( OpenTable, Just StripeGroup ) ->
+            True
+
+        ( Solids, Just SolidGroup ) ->
+            True
+
+        ( Stripes, Just StripeGroup ) ->
+            True
+
+        ( EightBall, Just EightGroup ) ->
+            True
+
+        _ ->
+            False
+
+
+{-| This finds the group of the first ball hit by the cue, if there is one, and only if any ball hit a wall after.
+-}
+legalFirstBallHitGroup : List ( Time.Posix, ShotEvent ) -> Maybe BallGroup
+legalFirstBallHitGroup shotEvents =
+    case shotEvents of
+        [] ->
+            Nothing
+
+        ( _, CueHitBall ball ) :: otherShotEvents ->
+            if List.any hasHitAWallOrPocket otherShotEvents then
+                Just (ballGroup ball)
+
+            else
+                Nothing
+
+        firstShotEvent :: otherShotEvents ->
+            legalFirstBallHitGroup otherShotEvents
+
+
+hasHitAWallOrPocket : ( Time.Posix, ShotEvent ) -> Bool
+hasHitAWallOrPocket ( _, shotEvent ) =
+    case shotEvent of
+        CueHitBall _ ->
+            False
+
+        CueHitWall ->
+            True
+
+        BallToPocket _ ->
+            True
+
+        BallToWall _ ->
+            True
+
+        Scratch ->
+            False
 
 
 checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> CurrentTarget -> PoolData -> WhatHappened
@@ -798,7 +907,7 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                 -- TODO: Combine case into tuple with new type `Scratched | NotScratched`.
                 let
                     winningPlayer =
-                        if ballPocketedEvents.scratched then
+                        if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
                             switchPlayer poolData.player
 
                         else
@@ -810,13 +919,14 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                 -- If the player wasn't targeting the 8-ball, then they lose!
                 gameOver (switchPlayer poolData.player) poolData
 
-    else if ballPocketedEvents.scratched then
+    else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
         PlayersFault
             (Pool
                 { poolData
                     | player = switchPlayer poolData.player
 
-                    -- TODO: Log Scratched internal event.
+                    -- TODO: Log Scratched/PlayersFault internal event.
+                    -- Should these be two separate events?
                 }
             )
 
