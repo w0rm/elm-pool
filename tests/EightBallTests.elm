@@ -784,6 +784,31 @@ suite =
                                     "Should be EightBall.PlayersFault, but found this instead:\n"
                                         ++ Debug.toString other
                     )
+                , test "if player hits the cue into a wall then into a ball in their target group, the other player gets ball-in-hand"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitWall (Time.millisToPosix 1)
+                                        , EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
                 , test "if player hits a ball in their target group and then the target hits a wall after, the other player does not get ball-in-hand"
                     (\_ ->
                         let
@@ -806,7 +831,7 @@ suite =
 
                             other ->
                                 Expect.fail <|
-                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                    "Should be EightBall.NextShot, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 , test "if player hits a ball in their target group and then the cue ball hits a wall after, the other player does not get ball-in-hand"
@@ -831,7 +856,7 @@ suite =
 
                             other ->
                                 Expect.fail <|
-                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                    "Should be EightBall.NextShot, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 ]

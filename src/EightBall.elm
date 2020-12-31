@@ -841,13 +841,7 @@ A legal hit during regular play (after the break) is based on the target ball gr
 -}
 isLegalHit : List ( Time.Posix, ShotEvent ) -> CurrentTarget -> Bool
 isLegalHit shotEvents previousTarget =
-    let
-        firstBallHitInGroup =
-            firstBallHitGroup shotEvents
-    in
-    case
-        ( previousTarget, firstBallHitInGroup )
-    of
+    case ( previousTarget, legalFirstBallHitGroup shotEvents ) of
         ( OpenTable, Just SolidGroup ) ->
             True
 
@@ -867,21 +861,23 @@ isLegalHit shotEvents previousTarget =
             False
 
 
-firstBallHitGroup : List ( Time.Posix, ShotEvent ) -> Maybe BallGroup
-firstBallHitGroup shotEvents =
+{-| This finds the group of the first ball hit by the cue, if there is one, and only if any ball hit a wall after.
+-}
+legalFirstBallHitGroup : List ( Time.Posix, ShotEvent ) -> Maybe BallGroup
+legalFirstBallHitGroup shotEvents =
     case shotEvents of
         [] ->
             Nothing
 
         ( _, CueHitBall ball ) :: otherShotEvents ->
-            if List.any hasHitAWallOrPocket shotEvents then
+            if List.any hasHitAWallOrPocket otherShotEvents then
                 Just (ballGroup ball)
 
             else
                 Nothing
 
         firstShotEvent :: otherShotEvents ->
-            firstBallHitGroup otherShotEvents
+            legalFirstBallHitGroup otherShotEvents
 
 
 hasHitAWallOrPocket : ( Time.Posix, ShotEvent ) -> Bool
