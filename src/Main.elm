@@ -116,7 +116,7 @@ update msg model =
         ( RunningMsg runningMsg, Running runningModel ) ->
             Running (Game.update runningMsg runningModel)
 
-        ( _, _ ) ->
+        _ ->
             model
 
 

@@ -26,8 +26,8 @@ import Simplify
 config : List Rule
 config =
     [ NoUnused.CustomTypeConstructors.rule
-        [ { moduleName = "Point3d"
-          , typeName = "Point3d"
+        [ { moduleName = "Point2d"
+          , typeName = "Point2d"
           , index = 1 -- Position of the phantom variable in the type's arguments
           }
         ]

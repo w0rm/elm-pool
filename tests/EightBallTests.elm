@@ -1,8 +1,7 @@
 module EightBallTests exposing (..)
 
 import EightBall
-import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
+import Expect
 import Test exposing (..)
 import Time
 
@@ -429,7 +428,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 0
 
                             other ->
@@ -481,7 +480,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 1
 
                             other ->
@@ -534,7 +533,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 0
 
                             other ->
@@ -586,7 +585,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 0
 
                             other ->
@@ -619,7 +618,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 1
 
                             other ->
@@ -703,9 +702,6 @@ suite =
                                         initialBreak
 
                                     EightBall.GameOver _ _ ->
-                                        initialBreak
-
-                                    EightBall.Error _ ->
                                         initialBreak
 
                                     EightBall.IllegalBreak pool ->
@@ -1067,9 +1063,6 @@ andKeepShooting shotEvents ruling =
         EightBall.GameOver _ _ ->
             ruling
 
-        EightBall.Error _ ->
-            ruling
-
         EightBall.IllegalBreak _ ->
             ruling
 
@@ -1094,9 +1087,6 @@ andRebreak shotEvents ruling =
             ruling
 
         EightBall.GameOver _ _ ->
-            ruling
-
-        EightBall.Error _ ->
             ruling
 
         EightBall.IllegalBreak pool ->
