@@ -22,7 +22,7 @@ import Json.Decode
 import Length exposing (Meters)
 import List
 import Physics.Body as Body
-import Physics.Contact as Contact exposing (Contact)
+import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
@@ -827,11 +827,6 @@ update msg model =
                                             Point3d.origin
                                             newModel.focalPointTimeline
                                 }
-
-                            Error error ->
-                                Debug.todo <|
-                                    "Error: "
-                                        ++ error
 
                     else
                         let

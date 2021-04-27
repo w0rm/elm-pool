@@ -93,7 +93,7 @@ pocketedIn : BallGroup -> List ( Ball, Player ) -> Int
 pocketedIn group pocketedBalls =
     pocketedBalls
         |> List.filter
-            (\( Ball number pocketedBallGroup, player ) ->
+            (\( Ball _ pocketedBallGroup, _ ) ->
                 pocketedBallGroup == group
             )
         |> List.length
@@ -303,14 +303,14 @@ Zero-based:
 
 -}
 currentPlayer : Pool state -> Int
-currentPlayer (Pool ({ player } as poolData)) =
+currentPlayer (Pool { player }) =
     playerToInt player
 
 
 {-| Get the current score.
 -}
 currentScore : Pool state -> { player1 : Int, player2 : Int }
-currentScore (Pool ({ player, pocketed, target } as poolData)) =
+currentScore (Pool { pocketed, target }) =
     case target of
         Open ->
             { player1 = 0
@@ -488,10 +488,6 @@ ballPlacedInHand when (Pool data) =
         }
 
 
-type Event
-    = Event EventData
-
-
 {-| When the cue ball comes into contact with a numbered ball.
 
 Note: once they are touching, there's no need to send this event again unless they are separated and come back into contact.
@@ -572,34 +568,27 @@ scratch when =
   - PlayersFault - when a player scratches (or, in the future, hits the wrong ball first). The next player must place the ball in hand.
   - NextShot - waiting for a player to shoot. Use `currentPlayer` to figure out which player is shooting. Use `playerShot` after the player shoots.
   - GameOver - when the game is over, this returns the winner.
-  - Error - when something unexpected happens, like a ball pocketed twice.
 
 -}
 type WhatHappened
     = IllegalBreak (Pool AwaitingRack)
     | PlayersFault (Pool AwaitingBallInHand)
     | NextShot (Pool AwaitingNextShot)
-      -- | NextTurn (Pool AwaitingNextTurn)
     | GameOver (Pool AwaitingNewGame) { winner : Int }
-    | Error String
 
 
 {-| Set game over via this function so we don't forget to add the internal event.
 -}
-gameOver : Player -> PoolData -> WhatHappened
-gameOver winner poolData =
-    GameOver
-        (Pool
-            { poolData
-                | events =
-                    poolData.events
-                        ++ [ { event = GameOver_
-                             , when = lastEventTime poolData.events
-                             }
-                           ]
-            }
-        )
-        { winner = playerToInt winner
+endGame : Pool a -> Pool AwaitingNewGame
+endGame (Pool poolData) =
+    Pool
+        { poolData
+            | events =
+                poolData.events
+                    ++ [ { event = GameOver_
+                         , when = lastEventTime poolData.events
+                         }
+                       ]
         }
 
 
@@ -713,7 +702,7 @@ playerRegularShot shotEvents data =
                                 |> List.sortWith eventTimeComparison
                     }
 
-        ( firstShotTime, firstShotEvent ) :: otherShotEvents ->
+        ( firstShotTime, _ ) :: _ ->
             let
                 allEventDataSorted =
                     data.events
@@ -818,9 +807,9 @@ groupPocketedEvents shotEvents =
     let
         allPocketedBalls =
             List.filter
-                (\( shotTime, shotEvent ) ->
+                (\( _, shotEvent ) ->
                     case shotEvent of
-                        BallToPocket ball ->
+                        BallToPocket _ ->
                             True
 
                         BallToWall _ ->
@@ -839,7 +828,7 @@ groupPocketedEvents shotEvents =
 
         scratched =
             List.any
-                (\( shotTime, shotEvent ) ->
+                (\( _, shotEvent ) ->
                     case shotEvent of
                         BallToPocket _ ->
                             False
@@ -894,12 +883,12 @@ type BallGroup
 
 
 ballGroup : Ball -> BallGroup
-ballGroup (Ball number group) =
+ballGroup (Ball _ group) =
     group
 
 
 ballPocketedInGroup : BallGroup -> ( Time.Posix, ShotEvent ) -> Bool
-ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
+ballPocketedInGroup ballGroup_ ( _, shotEvent ) =
     case shotEvent of
         BallToPocket ball ->
             ballGroup ball == ballGroup_
@@ -907,7 +896,7 @@ ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
         BallToWall _ ->
             False
 
-        CueHitBall ball ->
+        CueHitBall _ ->
             False
 
         CueHitWall ->
@@ -964,7 +953,7 @@ legalFirstBallHitGroup shotEvents =
             else
                 Nothing
 
-        firstShotEvent :: otherShotEvents ->
+        _ :: otherShotEvents ->
             legalFirstBallHitGroup otherShotEvents
 
 
@@ -1001,11 +990,15 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                         else
                             poolData.player
                 in
-                gameOver winningPlayer poolData
+                GameOver (endGame (Pool poolData))
+                    { winner = playerToInt winningPlayer
+                    }
 
             _ ->
                 -- If the player wasn't targeting the 8-ball, then they lose!
-                gameOver (switchPlayer poolData.player) poolData
+                GameOver (endGame (Pool poolData))
+                    { winner = playerToInt (switchPlayer poolData.player)
+                    }
 
     else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
         PlayersFault
@@ -1141,5 +1134,5 @@ lastShotEventTime shotEvents =
         [] ->
             Nothing
 
-        ( firstShotTime, firstShotEvent ) :: otherShotEvents ->
+        ( firstShotTime, _ ) :: _ ->
             Just firstShotTime
