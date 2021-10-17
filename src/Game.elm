@@ -1136,7 +1136,13 @@ update msg model =
                                                         force =
                                                             Quantity.interpolateFrom
                                                                 (Force.newtons 10)
-                                                                (Force.newtons 60)
+                                                                (if EightBall.isBreak playingState.pool then
+                                                                    -- Make break a bit stronger
+                                                                    Force.newtons 100
+
+                                                                 else
+                                                                    Force.newtons 60
+                                                                )
                                                                 (shootingStrength duration)
                                                     in
                                                     Body.applyImpulse

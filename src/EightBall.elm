@@ -6,7 +6,7 @@ module EightBall exposing
     , ShotEvent
     , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
-    , WhatHappened(..)
+    , WhatHappened(..), isBreak
     )
 
 {-| Pool game rules. Agnostic to game engine.
@@ -51,7 +51,7 @@ module EightBall exposing
 
 ## Ruling
 
-@docs WhatHappened
+@docs WhatHappened, isBreak
 
 -}
 
@@ -590,6 +590,13 @@ endGame (Pool poolData) =
                          }
                        ]
         }
+
+
+{-| Returns True if the current shot is a break
+-}
+isBreak : Pool AwaitingNextShot -> Bool
+isBreak (Pool data) =
+    lastEvent data.events == Just BallPlacedBehindHeadString
 
 
 {-| Send a series of shot events.
