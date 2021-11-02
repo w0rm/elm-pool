@@ -1,5 +1,5 @@
 module EightBall exposing
-    ( Pool, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart, start
+    ( Pool, start, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart
     , currentPlayer, currentScore
     , CurrentTarget(..), currentTarget
     , rack, placeBallBehindHeadstring, placeBallInHand, playerShot
@@ -23,7 +23,7 @@ module EightBall exposing
 
 # Init
 
-@docs Pool, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart, start
+@docs Pool, start, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart
 
 
 # View
@@ -267,6 +267,13 @@ numberedBall number =
         Nothing
 
 
+{-| Get the int value for a ball:
+
+    ballNumber eightBall == 8
+
+    ballNumber fifteenBall == 15
+
+-}
 ballNumber : Ball -> Int
 ballNumber (Ball n _) =
     n
@@ -372,12 +379,15 @@ currentTarget (Pool ({ pocketed } as poolData)) =
 
 
 {-| Waiting for the balls to be racked.
+
+Use `rack` when in this state.
+
 -}
 type AwaitingRack
     = AwaitingRack
 
 
-{-| Ready for a player to take another shot.
+{-| Ready for a player to take a shot.
 -}
 type AwaitingPlayerShot
     = AwaitingPlayerShot
