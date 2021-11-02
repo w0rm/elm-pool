@@ -6,7 +6,7 @@ module EightBall exposing
     , ShotEvent
     , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
-    , WhatHappened(..)
+    , WhatHappened(..), isBreak
     )
 
 {-| Pool game rules. Agnostic to game engine.
@@ -51,10 +51,11 @@ module EightBall exposing
 
 ## Ruling
 
-@docs WhatHappened
+@docs WhatHappened, isBreak
 
 -}
 
+import Set
 import Time
 
 
@@ -92,7 +93,7 @@ pocketedIn : BallGroup -> List ( Ball, Player ) -> Int
 pocketedIn group pocketedBalls =
     pocketedBalls
         |> List.filter
-            (\( Ball number pocketedBallGroup, player ) ->
+            (\( Ball _ pocketedBallGroup, _ ) ->
                 pocketedBallGroup == group
             )
         |> List.length
@@ -309,14 +310,14 @@ Zero-based:
 
 -}
 currentPlayer : Pool state -> Int
-currentPlayer (Pool ({ player } as poolData)) =
+currentPlayer (Pool { player }) =
     playerToInt player
 
 
 {-| Get the current score.
 -}
 currentScore : Pool state -> { player1 : Int, player2 : Int }
-currentScore (Pool ({ player, pocketed, target } as poolData)) =
+currentScore (Pool { pocketed, target }) =
     case target of
         Open ->
             { player1 = 0
@@ -497,10 +498,6 @@ placeBallInHand when (Pool data) =
         }
 
 
-type Event
-    = Event EventData
-
-
 {-| When the cue ball comes into contact with a numbered ball.
 
 Note: once they are touching, there's no need to send this event again unless they are separated and come back into contact.
@@ -577,37 +574,39 @@ scratch when =
 
 {-| After a player shoots, this returns the outcome.
 
+  - IllegalBreak - when a player does not drive four (4) balls to a wall. The balls must be reracked and the next player must place the ball behind the head string and break again.
   - PlayersFault - when a player scratches (or, in the future, hits the wrong ball first). The next player must place the ball in hand.
   - NextShot - waiting for a player to shoot. Use `currentPlayer` to figure out which player is shooting. Use `playerShot` after the player shoots.
   - GameOver - when the game is over, this returns the winner.
-  - Error - when something unexpected happens, like a ball pocketed twice.
 
 -}
 type WhatHappened
-    = PlayersFault (Pool AwaitingPlaceBallInHand)
+    = IllegalBreak (Pool AwaitingRack)
+    | PlayersFault (Pool AwaitingPlaceBallInHand)
     | NextShot (Pool AwaitingPlayerShot)
-      -- | NextTurn (Pool AwaitingNextTurn)
     | GameOver (Pool AwaitingStart) { winner : Int }
-    | Error String
 
 
 {-| Set game over via this function so we don't forget to add the internal event.
 -}
-gameOver : Player -> PoolData -> WhatHappened
-gameOver winner poolData =
-    GameOver
-        (Pool
-            { poolData
-                | events =
-                    poolData.events
-                        ++ [ { event = GameOver_
-                             , when = lastEventTime poolData.events
-                             }
-                           ]
-            }
-        )
-        { winner = playerToInt winner
+endGame : Pool a -> Pool AwaitingStart
+endGame (Pool poolData) =
+    Pool
+        { poolData
+            | events =
+                poolData.events
+                    ++ [ { event = GameOver_
+                         , when = lastEventTime poolData.events
+                         }
+                       ]
         }
+
+
+{-| Returns True if the current shot is a break
+-}
+isBreak : Pool AwaitingPlayerShot -> Bool
+isBreak (Pool data) =
+    lastEvent data.events == Just BallPlacedBehindHeadString
 
 
 {-| Send a series of shot events.
@@ -619,6 +618,91 @@ Note: if no balls are hit by the cue ball, send an empty list.
 -}
 playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingPlayerShot -> WhatHappened
 playerShot shotEvents (Pool data) =
+    case lastEvent data.events of
+        Just BallPlacedBehindHeadString ->
+            playerBreak shotEvents data
+
+        Just Racked ->
+            -- Error "The cue ball must be placed behind the headstring. The API should not allow this."
+            -- Make an assumption for now since we do not handle errors well in the game.
+            playerRegularShot shotEvents data
+
+        Just BallPlacedInHand ->
+            playerRegularShot shotEvents data
+
+        Just (Shot _) ->
+            playerRegularShot shotEvents data
+
+        Just GameOver_ ->
+            -- Error "The game is over. How did a player take another shot? The API should not allow this."
+            -- Make an assumption for now since we do not handle errors well in the game.
+            playerRegularShot shotEvents data
+
+        Nothing ->
+            -- Error "The table must be racked and ball placed behind the headstring. The API should not allow this."
+            -- Make an assumption for now since we do not handle errors well in the game.
+            playerRegularShot shotEvents data
+
+
+playerBreak : List ( Time.Posix, ShotEvent ) -> PoolData -> WhatHappened
+playerBreak shotEvents data =
+    let
+        { allPocketedBalls } =
+            groupPocketedEvents shotEvents
+
+        numberOfBallsToWall =
+            numberOfBallsHitWall shotEvents
+    in
+    if
+        numberOfBallsToWall
+            < 4
+            && List.length allPocketedBalls
+            < 1
+    then
+        IllegalBreak <|
+            Pool
+                { data
+                    | player = switchPlayer data.player
+                    , events =
+                        data.events
+                            ++ [ { event = Shot []
+                                 , when = lastEventTime data.events
+                                 }
+                               ]
+                            |> List.sortWith eventTimeComparison
+                }
+
+    else
+        -- We can assume the regular shot rules will apply because there are no incongruities.
+        playerRegularShot shotEvents data
+
+
+numberOfBallsHitWall : List ( Time.Posix, ShotEvent ) -> Int
+numberOfBallsHitWall =
+    List.filterMap
+        (\( _, shotEvent ) ->
+            case shotEvent of
+                BallToPocket _ ->
+                    Nothing
+
+                BallToWall (Ball number _) ->
+                    Just number
+
+                CueHitBall _ ->
+                    Nothing
+
+                CueHitWall ->
+                    Nothing
+
+                Scratch ->
+                    Nothing
+        )
+        >> Set.fromList
+        >> Set.size
+
+
+playerRegularShot : List ( Time.Posix, ShotEvent ) -> PoolData -> WhatHappened
+playerRegularShot shotEvents data =
     case shotEvents of
         [] ->
             -- Assume the cue is struck, but no other balls are hit.
@@ -635,7 +719,7 @@ playerShot shotEvents (Pool data) =
                                 |> List.sortWith eventTimeComparison
                     }
 
-        ( firstShotTime, firstShotEvent ) :: otherShotEvents ->
+        ( firstShotTime, _ ) :: _ ->
             let
                 allEventDataSorted =
                     data.events
@@ -676,8 +760,8 @@ playerShot shotEvents (Pool data) =
 eventTimeComparison : EventData -> EventData -> Order
 eventTimeComparison eventData1 eventData2 =
     compare
-        (Time.toMillis Time.utc eventData1.when)
-        (Time.toMillis Time.utc eventData2.when)
+        (Time.posixToMillis eventData1.when)
+        (Time.posixToMillis eventData2.when)
 
 
 {-| TODO: May need to check for equal times and put things like CueHitBall before BallToPocket.
@@ -740,9 +824,9 @@ groupPocketedEvents shotEvents =
     let
         allPocketedBalls =
             List.filter
-                (\( shotTime, shotEvent ) ->
+                (\( _, shotEvent ) ->
                     case shotEvent of
-                        BallToPocket ball ->
+                        BallToPocket _ ->
                             True
 
                         BallToWall _ ->
@@ -761,7 +845,7 @@ groupPocketedEvents shotEvents =
 
         scratched =
             List.any
-                (\( shotTime, shotEvent ) ->
+                (\( _, shotEvent ) ->
                     case shotEvent of
                         BallToPocket _ ->
                             False
@@ -816,12 +900,12 @@ type BallGroup
 
 
 ballGroup : Ball -> BallGroup
-ballGroup (Ball number group) =
+ballGroup (Ball _ group) =
     group
 
 
 ballPocketedInGroup : BallGroup -> ( Time.Posix, ShotEvent ) -> Bool
-ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
+ballPocketedInGroup ballGroup_ ( _, shotEvent ) =
     case shotEvent of
         BallToPocket ball ->
             ballGroup ball == ballGroup_
@@ -829,7 +913,7 @@ ballPocketedInGroup ballGroup_ ( posixTime, shotEvent ) =
         BallToWall _ ->
             False
 
-        CueHitBall ball ->
+        CueHitBall _ ->
             False
 
         CueHitWall ->
@@ -886,7 +970,7 @@ legalFirstBallHitGroup shotEvents =
             else
                 Nothing
 
-        firstShotEvent :: otherShotEvents ->
+        _ :: otherShotEvents ->
             legalFirstBallHitGroup otherShotEvents
 
 
@@ -923,11 +1007,15 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                         else
                             poolData.player
                 in
-                gameOver winningPlayer poolData
+                GameOver (endGame (Pool poolData))
+                    { winner = playerToInt winningPlayer
+                    }
 
             _ ->
                 -- If the player wasn't targeting the 8-ball, then they lose!
-                gameOver (switchPlayer poolData.player) poolData
+                GameOver (endGame (Pool poolData))
+                    { winner = playerToInt (switchPlayer poolData.player)
+                    }
 
     else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
         PlayersFault
@@ -1006,6 +1094,14 @@ pocketedInSameGroup { solidsPocketed, stripesPocketed } =
            )
 
 
+lastEvent : List EventData -> Maybe InternalEvent
+lastEvent =
+    List.sortWith eventTimeComparison
+        >> List.reverse
+        >> List.head
+        >> Maybe.map .event
+
+
 {-| When a player shoots, but sends no events, we still want to log the event, so we try to find the last event time. If there is none, default to `Time.millisToPosix 0`.
 -}
 lastEventTime : List EventData -> Time.Posix
@@ -1055,5 +1151,5 @@ lastShotEventTime shotEvents =
         [] ->
             Nothing
 
-        ( firstShotTime, firstShotEvent ) :: otherShotEvents ->
+        ( firstShotTime, _ ) :: _ ->
             Just firstShotTime

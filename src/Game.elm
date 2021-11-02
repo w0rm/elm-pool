@@ -22,7 +22,7 @@ import Json.Decode
 import Length exposing (Meters)
 import List
 import Physics.Body as Body
-import Physics.Contact as Contact exposing (Contact)
+import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
@@ -782,6 +782,16 @@ update msg model =
                 Simulating simulatingState ->
                     if ballsStoppedMoving newModel.world then
                         case EightBall.playerShot (List.reverse simulatingState.events) simulatingState.pool of
+                            IllegalBreak newPool ->
+                                { newModel
+                                    | world = Bodies.world -- Reset the table.
+                                    , state = initialPlacingBallState PlacingBehindHeadString (EightBall.rack time newPool)
+                                    , focalPointTimeline =
+                                        Animator.go Animator.quickly
+                                            Point3d.origin
+                                            newModel.focalPointTimeline
+                                }
+
                             PlayersFault newPool ->
                                 { newModel
                                     | state = initialPlacingBallState PlacingBallInHand newPool
@@ -817,9 +827,6 @@ update msg model =
                                             Point3d.origin
                                             newModel.focalPointTimeline
                                 }
-
-                            Error _ ->
-                                Debug.todo "Error"
 
                     else
                         let
@@ -1129,7 +1136,13 @@ update msg model =
                                                         force =
                                                             Quantity.interpolateFrom
                                                                 (Force.newtons 10)
-                                                                (Force.newtons 60)
+                                                                (if EightBall.isBreak playingState.pool then
+                                                                    -- Make break a bit stronger
+                                                                    Force.newtons 100
+
+                                                                 else
+                                                                    Force.newtons 60
+                                                                )
                                                                 (shootingStrength duration)
                                                     in
                                                     Body.applyImpulse

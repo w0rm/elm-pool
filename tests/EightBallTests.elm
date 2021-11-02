@@ -1,8 +1,7 @@
 module EightBallTests exposing (..)
 
 import EightBall
-import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
+import Expect
 import Test exposing (..)
 import Time
 
@@ -22,7 +21,7 @@ suite =
                                     |> EightBall.playerShot []
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.IllegalBreak pool ->
                                 pool
                                     |> EightBall.currentScore
                                     |> Expect.equal
@@ -32,7 +31,7 @@ suite =
 
                             other ->
                                 Expect.fail <|
-                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                    "Should be EightBall.IllegalBreak, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 , test "a ball is pocketed and target balls are decided, score is 1-0"
@@ -113,7 +112,9 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot []
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    |> andKeepShooting []
+                                    |> andKeepShooting []
                         in
                         case nextAction of
                             EightBall.PlayersFault pool ->
@@ -133,7 +134,12 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    -- Player 1 misses
+                                    |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 0) EightBall.twoBall
                                         , EightBall.ballHitWall (Time.millisToPosix 1) EightBall.twoBall
                                         ]
@@ -156,7 +162,13 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot []
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    -- Player 1 misses
+                                    |> andKeepShooting []
+                                    -- Player 2 misses
                                     |> andKeepShooting []
                         in
                         case nextAction of
@@ -416,7 +428,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 0
 
                             other ->
@@ -431,9 +443,8 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
-                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
-                                        ]
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
                                     |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
@@ -469,7 +480,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 1
 
                             other ->
@@ -484,9 +495,8 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
-                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
-                                        ]
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
                                     |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
@@ -523,7 +533,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 0
 
                             other ->
@@ -538,9 +548,8 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
-                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
-                                        ]
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
                                     |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
@@ -576,7 +585,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 0
 
                             other ->
@@ -591,9 +600,8 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
-                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
-                                        ]
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
                                     |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
@@ -610,12 +618,109 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.GameOver pool { winner } ->
+                            EightBall.GameOver _ { winner } ->
                                 Expect.equal winner 1
 
                             other ->
                                 Expect.fail <|
                                     "Should be EightBall.GameOver, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                ]
+            , describe "legal break"
+                [ test "if player does not get 4 balls to a wall, it's a re-rack and break for the other player"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.IllegalBreak pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.IllegalBreak, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "if player does not get 4 balls to a wall and the next player too, back to the first to break"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                                    |> andRebreak []
+                        in
+                        case nextAction of
+                            EightBall.IllegalBreak pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.IllegalBreak, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "if player does not get 4 balls to a wall and the next player too, back to the first to break, from game"
+                    (\_ ->
+                        {-
+                           [{ event = Racked, when = Posix 0 },
+                            { event = BallPlacedBehindHeadString, when = Posix 1609440921470 },
+                            { event = Shot [], when = Posix 1609440921470 },
+                            { event = Racked, when = Posix 1609440936665 },
+                            { event = BallPlacedBehindHeadString, when = Posix 1609440940067 }]
+                        -}
+                        let
+                            initialBreak =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 1609440921470)
+                                    |> EightBall.playerShot []
+
+                            secondBreak =
+                                case initialBreak of
+                                    EightBall.NextShot _ ->
+                                        initialBreak
+
+                                    EightBall.PlayersFault _ ->
+                                        initialBreak
+
+                                    EightBall.GameOver _ _ ->
+                                        initialBreak
+
+                                    EightBall.IllegalBreak pool ->
+                                        pool
+                                            |> EightBall.rack (Time.millisToPosix 1609440936665)
+                                            |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 1609440940067)
+                                            |> EightBall.playerShot []
+                        in
+                        case secondBreak of
+                            EightBall.IllegalBreak pool ->
+                                pool
+                                    |> Expect.all
+                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
+                                        ]
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.IllegalBreak, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 ]
@@ -687,9 +792,8 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
-                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
-                                        ]
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
                                     |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fiveBall
@@ -743,7 +847,12 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot []
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    -- Player 1 misses
+                                    |> andKeepShooting []
                         in
                         case nextAction of
                             EightBall.PlayersFault pool ->
@@ -765,7 +874,12 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    -- Player 1 misses
+                                    |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
 
                                         -- No wall hit.
@@ -791,7 +905,11 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    |> andKeepShooting
                                         [ EightBall.cueHitWall (Time.millisToPosix 1)
                                         , EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         ]
@@ -816,7 +934,11 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballHitWall (Time.millisToPosix 1) EightBall.oneBall
                                         ]
@@ -841,7 +963,11 @@ suite =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
                                     |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
-                                    |> EightBall.playerShot
+                                    -- Player 1 has legal break
+                                    |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
+                                    -- Player 2 misses
+                                    |> andKeepShooting []
+                                    |> andKeepShooting
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.cueHitWall (Time.millisToPosix 1)
                                         ]
@@ -937,5 +1063,44 @@ andKeepShooting shotEvents ruling =
         EightBall.GameOver _ _ ->
             ruling
 
-        EightBall.Error _ ->
+        EightBall.IllegalBreak _ ->
             ruling
+
+
+andRebreak : List ( Time.Posix, EightBall.ShotEvent ) -> EightBall.WhatHappened -> EightBall.WhatHappened
+andRebreak shotEvents ruling =
+    let
+        -- Could instead expose `EightBall.lastEventTime` for consistency.
+        lastEventTime =
+            shotEvents
+                |> List.map (\( time, _ ) -> time)
+                |> List.sortBy (Time.toMillis Time.utc)
+                |> List.reverse
+                |> List.head
+                |> Maybe.withDefault (Time.millisToPosix 0)
+    in
+    case ruling of
+        EightBall.NextShot _ ->
+            ruling
+
+        EightBall.PlayersFault _ ->
+            ruling
+
+        EightBall.GameOver _ _ ->
+            ruling
+
+        EightBall.IllegalBreak pool ->
+            pool
+                |> EightBall.rack lastEventTime
+                |> EightBall.placeBallBehindHeadstring (Time.millisToPosix (Time.posixToMillis lastEventTime + 1))
+                |> EightBall.playerShot shotEvents
+
+
+legalBreakNonePocketed : Time.Posix -> List ( Time.Posix, EightBall.ShotEvent )
+legalBreakNonePocketed when =
+    [ EightBall.cueHitBall when EightBall.oneBall
+    , EightBall.ballHitWall when EightBall.oneBall
+    , EightBall.ballHitWall when EightBall.fifteenBall
+    , EightBall.ballHitWall when EightBall.thirteenBall
+    , EightBall.ballHitWall when EightBall.fiveBall
+    ]
