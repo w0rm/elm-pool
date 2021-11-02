@@ -1,8 +1,8 @@
 module EightBall exposing
-    ( Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
+    ( Pool, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart, start
     , currentPlayer, currentScore
     , CurrentTarget(..), currentTarget
-    , rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
+    , rack, placeBallBehindHeadstring, placeBallInHand, playerShot
     , ShotEvent
     , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
@@ -23,7 +23,7 @@ module EightBall exposing
 
 # Init
 
-@docs Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
+@docs Pool, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart, start
 
 
 # View
@@ -35,7 +35,7 @@ module EightBall exposing
 
 # Update
 
-@docs rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
+@docs rack, placeBallBehindHeadstring, placeBallInHand, playerShot
 
 
 ## Shot Events
@@ -379,8 +379,8 @@ type AwaitingRack
 
 {-| Ready for a player to take another shot.
 -}
-type AwaitingNextShot
-    = AwaitingNextShot
+type AwaitingPlayerShot
+    = AwaitingPlayerShot
 
 
 {-| When a player scratches, or otherwise fouls, during regular play, the next player is given ball-in-hand anywhere on the table.
@@ -388,8 +388,8 @@ type AwaitingNextShot
 See [WPA rules](https://wpapool.com/rules-of-play/) 1.5 Cue Ball in Hand for more info.
 
 -}
-type AwaitingBallInHand
-    = AwaitingBallInHand
+type AwaitingPlaceBallInHand
+    = AwaitingPlaceBallInHand
 
 
 {-| This is the area where the player can place the cue ball before a break.
@@ -408,8 +408,8 @@ type AwaitingPlaceBallBehindHeadstring
 
 {-| When the game is over, start a new game to play again.
 -}
-type AwaitingNewGame
-    = AwaitingNewGame
+type AwaitingStart
+    = AwaitingStart
 
 
 {-| The balls must be racked before the player can place the cue ball and break.
@@ -459,8 +459,8 @@ type ShotEvent
 
 {-| When the ball is placed behind the head string after racking.
 -}
-ballPlacedBehindHeadString : Time.Posix -> Pool AwaitingPlaceBallBehindHeadstring -> Pool AwaitingNextShot
-ballPlacedBehindHeadString when (Pool data) =
+placeBallBehindHeadstring : Time.Posix -> Pool AwaitingPlaceBallBehindHeadstring -> Pool AwaitingPlayerShot
+placeBallBehindHeadstring when (Pool data) =
     Pool
         { data
             | events =
@@ -474,8 +474,8 @@ ballPlacedBehindHeadString when (Pool data) =
 
 {-| When the ball is placed anywhere on the table.
 -}
-ballPlacedInHand : Time.Posix -> Pool AwaitingBallInHand -> Pool AwaitingNextShot
-ballPlacedInHand when (Pool data) =
+placeBallInHand : Time.Posix -> Pool AwaitingPlaceBallInHand -> Pool AwaitingPlayerShot
+placeBallInHand when (Pool data) =
     Pool
         { data
             | events =
@@ -574,10 +574,10 @@ scratch when =
 
 -}
 type WhatHappened
-    = PlayersFault (Pool AwaitingBallInHand)
-    | NextShot (Pool AwaitingNextShot)
+    = PlayersFault (Pool AwaitingPlaceBallInHand)
+    | NextShot (Pool AwaitingPlayerShot)
       -- | NextTurn (Pool AwaitingNextTurn)
-    | GameOver (Pool AwaitingNewGame) { winner : Int }
+    | GameOver (Pool AwaitingStart) { winner : Int }
     | Error String
 
 
@@ -607,7 +607,7 @@ Note: if no balls are hit by the cue ball, send an empty list.
     playerShot [] pool -- Cue struck, but no other balls hit.
 
 -}
-playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingNextShot -> WhatHappened
+playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingPlayerShot -> WhatHappened
 playerShot shotEvents (Pool data) =
     case shotEvents of
         [] ->
