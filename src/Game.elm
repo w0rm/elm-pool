@@ -11,7 +11,7 @@ import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
-import EightBall exposing (AwaitingBallInHand, AwaitingNewGame, AwaitingNextShot, AwaitingPlaceBallBehindHeadstring, Pool, ShotEvent, WhatHappened(..))
+import EightBall exposing (AwaitingPlaceBallBehindHeadstring, AwaitingPlaceBallInHand, AwaitingPlayerShot, AwaitingStart, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Frame3d
 import Html exposing (Html)
@@ -72,12 +72,12 @@ type State
     = PlacingBehindHeadString (PlacingBallState AwaitingPlaceBallBehindHeadstring)
     | Playing PlayingState
     | Simulating SimulatingState
-    | PlacingBallInHand (PlacingBallState AwaitingBallInHand)
-    | GameOver (EightBall.Pool AwaitingNewGame) Int
+    | PlacingBallInHand (PlacingBallState AwaitingPlaceBallInHand)
+    | GameOver (EightBall.Pool AwaitingStart) Int
 
 
 type alias PlayingState =
-    { pool : Pool AwaitingNextShot
+    { pool : Pool AwaitingPlayerShot
     , cueBallPosition : Point3d Meters WorldCoordinates
     , cueElevation : Angle
     , hitElevation : Angle
@@ -93,7 +93,7 @@ type PlayingMouse
     | NothingMeaningful
 
 
-initialPlayingState : Point3d Meters WorldCoordinates -> Pool AwaitingNextShot -> State
+initialPlayingState : Point3d Meters WorldCoordinates -> Pool AwaitingPlayerShot -> State
 initialPlayingState cueBallPosition pool =
     Playing
         { pool = pool
@@ -128,11 +128,11 @@ initialPlacingBallState fn pool =
 
 type alias SimulatingState =
     { events : List ( Time.Posix, ShotEvent )
-    , pool : Pool AwaitingNextShot
+    , pool : Pool AwaitingPlayerShot
     }
 
 
-initialSimulatingState : Pool AwaitingNextShot -> State
+initialSimulatingState : Pool AwaitingPlayerShot -> State
 initialSimulatingState pool =
     Simulating
         { pool = pool
@@ -870,7 +870,7 @@ update msg model =
                     case canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world of
                         CanSpawnAt position ->
                             { model
-                                | state = initialPlayingState position (EightBall.ballPlacedInHand model.time pool)
+                                | state = initialPlayingState position (EightBall.placeBallInHand model.time pool)
                                 , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                                 , focalPointTimeline =
                                     Animator.go Animator.quickly
@@ -888,7 +888,7 @@ update msg model =
                     case canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world of
                         CanSpawnAt position ->
                             { model
-                                | state = initialPlayingState position (EightBall.ballPlacedBehindHeadString model.time pool)
+                                | state = initialPlayingState position (EightBall.placeBallBehindHeadstring model.time pool)
                                 , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                                 , focalPointTimeline =
                                     Animator.go Animator.quickly
