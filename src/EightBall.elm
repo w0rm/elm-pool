@@ -1,8 +1,8 @@
 module EightBall exposing
-    ( Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
+    ( Pool, start, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart
     , currentPlayer, currentScore
     , CurrentTarget(..), currentTarget
-    , rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
+    , rack, placeBallBehindHeadstring, placeBallInHand, playerShot
     , ShotEvent
     , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
@@ -23,7 +23,7 @@ module EightBall exposing
 
 # Init
 
-@docs Pool, AwaitingRack, AwaitingNextShot, AwaitingBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingNewGame, start
+@docs Pool, start, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart
 
 
 # View
@@ -35,7 +35,7 @@ module EightBall exposing
 
 # Update
 
-@docs rack, ballPlacedBehindHeadString, ballPlacedInHand, playerShot
+@docs rack, placeBallBehindHeadstring, placeBallInHand, playerShot
 
 
 ## Shot Events
@@ -268,6 +268,13 @@ numberedBall number =
         Nothing
 
 
+{-| Get the int value for a ball:
+
+    ballNumber eightBall == 8
+
+    ballNumber fifteenBall == 15
+
+-}
 ballNumber : Ball -> Int
 ballNumber (Ball n _) =
     n
@@ -373,15 +380,18 @@ currentTarget (Pool ({ pocketed } as poolData)) =
 
 
 {-| Waiting for the balls to be racked.
+
+Use `rack` when in this state.
+
 -}
 type AwaitingRack
     = AwaitingRack
 
 
-{-| Ready for a player to take another shot.
+{-| Ready for a player to take a shot.
 -}
-type AwaitingNextShot
-    = AwaitingNextShot
+type AwaitingPlayerShot
+    = AwaitingPlayerShot
 
 
 {-| When a player scratches, or otherwise fouls, during regular play, the next player is given ball-in-hand anywhere on the table.
@@ -389,8 +399,8 @@ type AwaitingNextShot
 See [WPA rules](https://wpapool.com/rules-of-play/) 1.5 Cue Ball in Hand for more info.
 
 -}
-type AwaitingBallInHand
-    = AwaitingBallInHand
+type AwaitingPlaceBallInHand
+    = AwaitingPlaceBallInHand
 
 
 {-| This is the area where the player can place the cue ball before a break.
@@ -409,8 +419,8 @@ type AwaitingPlaceBallBehindHeadstring
 
 {-| When the game is over, start a new game to play again.
 -}
-type AwaitingNewGame
-    = AwaitingNewGame
+type AwaitingStart
+    = AwaitingStart
 
 
 {-| The balls must be racked before the player can place the cue ball and break.
@@ -460,8 +470,8 @@ type ShotEvent
 
 {-| When the ball is placed behind the head string after racking.
 -}
-ballPlacedBehindHeadString : Time.Posix -> Pool AwaitingPlaceBallBehindHeadstring -> Pool AwaitingNextShot
-ballPlacedBehindHeadString when (Pool data) =
+placeBallBehindHeadstring : Time.Posix -> Pool AwaitingPlaceBallBehindHeadstring -> Pool AwaitingPlayerShot
+placeBallBehindHeadstring when (Pool data) =
     Pool
         { data
             | events =
@@ -475,8 +485,8 @@ ballPlacedBehindHeadString when (Pool data) =
 
 {-| When the ball is placed anywhere on the table.
 -}
-ballPlacedInHand : Time.Posix -> Pool AwaitingBallInHand -> Pool AwaitingNextShot
-ballPlacedInHand when (Pool data) =
+placeBallInHand : Time.Posix -> Pool AwaitingPlaceBallInHand -> Pool AwaitingPlayerShot
+placeBallInHand when (Pool data) =
     Pool
         { data
             | events =
@@ -572,14 +582,14 @@ scratch when =
 -}
 type WhatHappened
     = IllegalBreak (Pool AwaitingRack)
-    | PlayersFault (Pool AwaitingBallInHand)
-    | NextShot (Pool AwaitingNextShot)
-    | GameOver (Pool AwaitingNewGame) { winner : Int }
+    | PlayersFault (Pool AwaitingPlaceBallInHand)
+    | NextShot (Pool AwaitingPlayerShot)
+    | GameOver (Pool AwaitingStart) { winner : Int }
 
 
 {-| Set game over via this function so we don't forget to add the internal event.
 -}
-endGame : Pool a -> Pool AwaitingNewGame
+endGame : Pool a -> Pool AwaitingStart
 endGame (Pool poolData) =
     Pool
         { poolData
@@ -594,7 +604,7 @@ endGame (Pool poolData) =
 
 {-| Returns True if the current shot is a break
 -}
-isBreak : Pool AwaitingNextShot -> Bool
+isBreak : Pool AwaitingPlayerShot -> Bool
 isBreak (Pool data) =
     lastEvent data.events == Just BallPlacedBehindHeadString
 
@@ -606,7 +616,7 @@ Note: if no balls are hit by the cue ball, send an empty list.
     playerShot [] pool -- Cue struck, but no other balls hit.
 
 -}
-playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingNextShot -> WhatHappened
+playerShot : List ( Time.Posix, ShotEvent ) -> Pool AwaitingPlayerShot -> WhatHappened
 playerShot shotEvents (Pool data) =
     case lastEvent data.events of
         Just BallPlacedBehindHeadString ->

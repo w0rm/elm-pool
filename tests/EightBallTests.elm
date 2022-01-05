@@ -17,7 +17,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot []
                         in
                         case nextAction of
@@ -40,7 +40,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -66,7 +66,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -111,7 +111,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     |> andKeepShooting []
                                     |> andKeepShooting []
@@ -133,7 +133,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -161,7 +161,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -188,7 +188,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -213,7 +213,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.fifteenBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.tenBall
@@ -237,7 +237,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -262,7 +262,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -288,7 +288,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -322,7 +322,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -362,7 +362,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.nineBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.nineBall
@@ -408,7 +408,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
@@ -442,7 +442,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
@@ -494,7 +494,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
@@ -547,7 +547,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
@@ -599,7 +599,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
@@ -634,7 +634,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         ]
@@ -658,7 +658,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         ]
@@ -690,7 +690,7 @@ suite =
                             initialBreak =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 1609440921470)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 1609440921470)
                                     |> EightBall.playerShot []
 
                             secondBreak =
@@ -707,7 +707,7 @@ suite =
                                     EightBall.IllegalBreak pool ->
                                         pool
                                             |> EightBall.rack (Time.millisToPosix 1609440936665)
-                                            |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 1609440940067)
+                                            |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 1609440940067)
                                             |> EightBall.playerShot []
                         in
                         case secondBreak of
@@ -731,7 +731,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 2) EightBall.oneBall
@@ -761,7 +761,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.nineBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 2) EightBall.nineBall
@@ -791,7 +791,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2
@@ -846,7 +846,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -873,7 +873,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -904,7 +904,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -933,7 +933,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -962,7 +962,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     -- Player 1 has legal break
                                     |> EightBall.playerShot (legalBreakNonePocketed (Time.millisToPosix 0))
                                     -- Player 2 misses
@@ -993,7 +993,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.scratch (Time.millisToPosix 789)
@@ -1016,7 +1016,7 @@ suite =
                             nextAction =
                                 EightBall.start
                                     |> EightBall.rack (Time.millisToPosix 0)
-                                    |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
                                     |> EightBall.playerShot
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.scratch (Time.millisToPosix 789)
@@ -1025,7 +1025,7 @@ suite =
                         case nextAction of
                             EightBall.PlayersFault pool ->
                                 pool
-                                    |> EightBall.ballPlacedInHand (Time.millisToPosix 800)
+                                    |> EightBall.placeBallInHand (Time.millisToPosix 800)
                                     |> EightBall.currentPlayer
                                     |> Expect.equal 1
 
@@ -1057,7 +1057,7 @@ andKeepShooting shotEvents ruling =
 
         EightBall.PlayersFault pool ->
             pool
-                |> EightBall.ballPlacedInHand lastEventTime
+                |> EightBall.placeBallInHand lastEventTime
                 |> EightBall.playerShot shotEvents
 
         EightBall.GameOver _ _ ->
@@ -1092,7 +1092,7 @@ andRebreak shotEvents ruling =
         EightBall.IllegalBreak pool ->
             pool
                 |> EightBall.rack lastEventTime
-                |> EightBall.ballPlacedBehindHeadString (Time.millisToPosix (Time.posixToMillis lastEventTime + 1))
+                |> EightBall.placeBallBehindHeadstring (Time.millisToPosix (Time.posixToMillis lastEventTime + 1))
                 |> EightBall.playerShot shotEvents
 
 
