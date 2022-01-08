@@ -40,3 +40,4 @@ config =
     , NoUnused.Variables.rule
     , Simplify.rule
     ]
+        |> List.map (Review.Rule.ignoreErrorsForDirectories [ "vendor/" ])

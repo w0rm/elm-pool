@@ -1,4 +1,22 @@
-module Game exposing (Model, Msg, initial, subscriptions, update, view)
+module Game exposing
+    ( Camera
+    , CueData
+    , Effect(..)
+    , Model
+    , Msg(..)
+    , State(..)
+    , currentPlayer
+    , currentTarget
+    , initial
+    , subscriptions
+    , subscriptionsSimulating
+    , update
+    , updateCueMove
+    , updatePlacedBallBehindHeadstring
+    , updatePlacedBallInHand
+    , updateShoot
+    , view
+    )
 
 import Angle exposing (Angle)
 import Animator exposing (Timeline)
@@ -144,12 +162,17 @@ type Msg
     = Tick Time.Posix
     | Resize Int Int
     | MouseWheel Float
-    | MouseDown (Point2d Pixels ScreenCoordinates)
+    | MouseDown
+        { x : Float
+        , y : Float
+        }
     | MouseUp
-    | MouseMove (Point2d Pixels ScreenCoordinates)
+    | MouseMove
+        { x : Float
+        , y : Float
+        }
     | ShootButtonDown
     | ShootButtonUp
-    | StartNewGameButtonClicked
 
 
 initial : Dict Int (Material.Texture Color) -> Material.Texture Float -> ( Float, Float ) -> Model
@@ -355,7 +378,6 @@ view ({ world, ballTextures, roughnessTexture, dimensions, cameraTimeline, focal
             , background = Scene3d.backgroundColor Color.black
             , toneMapping = Scene3d.noToneMapping
             }
-        , viewCurrentStatus model.state
         , viewShootingStrength model
         ]
 
@@ -524,87 +546,6 @@ playingEntities world playingState camera3d cameraAzimuth =
             Scene3d.nothing
 
 
-
--- View Current Status
-
-
-viewCurrentStatus : State -> Html Msg
-viewCurrentStatus state =
-    Html.div
-        [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "bottom" "0"
-        , Html.Attributes.style "left" "50%" -- To center absolute content.
-        ]
-        [ Html.node "style"
-            []
-            [ Html.text """
-@font-face {
-    font-family: 'Teko';
-    src: url('assets/Teko-Medium.woff2') format('woff2'),
-        url('assets/Teko-Medium.woff') format('woff');
-    font-weight: 500;
-    font-style: normal;
-    font-display: block;
-}
-"""
-            ]
-        , case state of
-            GameOver _ _ ->
-                viewGameOver state
-
-            _ ->
-                Html.div statusStyle
-                    [ Html.text (currentPlayer state)
-                    , Html.text " - "
-                    , Html.text (currentTarget state)
-                    ]
-        ]
-
-
-statusStyle : List (Html.Attribute Msg)
-statusStyle =
-    [ -- To center within absolute container.
-      Html.Attributes.style "position" "relative"
-    , Html.Attributes.style "left" "-50%"
-    , Html.Attributes.style "text-align" "center"
-
-    -- Color
-    , Html.Attributes.style "background-color" "#121517"
-    , Html.Attributes.style "color" "#eef"
-
-    -- Border/Edges
-    , Html.Attributes.style "border-radius" "10px 10px 0 0"
-    , Html.Attributes.style "box-shadow" "0 4px 12px 0 rgba(0, 0, 0, 0.15)"
-
-    -- Font
-    , Html.Attributes.style "font-family" "Teko"
-    , Html.Attributes.style "font-size" "40px"
-
-    -- Other
-    , Html.Attributes.style "opacity" "0.9"
-    , Html.Attributes.style "padding" "15px 25px 10px 25px"
-    ]
-
-
-viewGameOver : State -> Html Msg
-viewGameOver state =
-    Html.button
-        (statusStyle
-            ++ [ Html.Attributes.style "border" "none"
-               , Html.Attributes.style "cursor" "pointer"
-               , Html.Events.onClick StartNewGameButtonClicked
-               ]
-        )
-        [ Html.text (currentPlayer state)
-        , Html.text " won!"
-        , Html.div
-            [ Html.Attributes.style "color" "rgba(86, 186, 79, 0.7)"
-            ]
-            [ Html.text "Play again?"
-            ]
-        ]
-
-
 viewShootingStrength : Model -> Html Msg
 viewShootingStrength { state, dimensions } =
     case state of
@@ -654,35 +595,28 @@ viewShootingStrength { state, dimensions } =
             Html.text ""
 
 
-currentPlayer : State -> String
-currentPlayer state =
-    let
-        playerIndex =
-            case state of
-                PlacingBehindHeadString { pool } ->
-                    EightBall.currentPlayer pool
+currentPlayer : Model -> Int
+currentPlayer model =
+    currentPlayerIndex model.state
 
-                Playing { pool } ->
-                    EightBall.currentPlayer pool
 
-                Simulating { pool } ->
-                    EightBall.currentPlayer pool
+currentPlayerIndex : State -> Int
+currentPlayerIndex state =
+    case state of
+        PlacingBehindHeadString { pool } ->
+            EightBall.currentPlayer pool
 
-                PlacingBallInHand { pool } ->
-                    EightBall.currentPlayer pool
+        Playing { pool } ->
+            EightBall.currentPlayer pool
 
-                GameOver _ winner ->
-                    winner
-    in
-    case playerIndex of
-        0 ->
-            "Player 1"
+        Simulating { pool } ->
+            EightBall.currentPlayer pool
 
-        1 ->
-            "Player 2"
+        PlacingBallInHand { pool } ->
+            EightBall.currentPlayer pool
 
-        _ ->
-            "Unknown"
+        GameOver _ winner ->
+            winner
 
 
 currentTarget : State -> String
@@ -733,6 +667,14 @@ subscriptions _ =
         ]
 
 
+subscriptionsSimulating : Model -> Sub Msg
+subscriptionsSimulating model =
+    Sub.batch
+        [ Browser.Events.onResize Resize
+        , Browser.Events.onAnimationFrame Tick
+        ]
+
+
 ballsStoppedMoving : World Id -> Bool
 ballsStoppedMoving world =
     List.all
@@ -754,7 +696,22 @@ ballsStoppedMoving world =
         (World.bodies world)
 
 
-update : Msg -> Model -> Model
+type Effect
+    = NoEffect
+    | SetBallInHandPlace (Point3d Meters WorldCoordinates)
+    | SetBehindHeadStringPlace (Point3d Meters WorldCoordinates)
+    | Shoot (Axis3d Meters WorldCoordinates) Duration Camera
+    | CueMove (Maybe CueData) Camera
+
+
+type alias CueData =
+    { cueElevation : Angle
+    , hitElevation : Angle
+    , hitRelativeAzimuth : Angle
+    }
+
+
+update : Msg -> Model -> ( Model, Effect )
 update msg model =
     case msg of
         Tick time ->
@@ -768,7 +725,7 @@ update msg model =
             in
             case newModel.state of
                 Playing playingState ->
-                    { newModel
+                    ( { newModel
                         | state =
                             Playing
                                 { playingState
@@ -777,30 +734,37 @@ update msg model =
                                             (Quantity.plus (seconds (1 / 60)))
                                             playingState.shootButton
                                 }
-                    }
+                      }
+                    , NoEffect
+                    )
 
                 Simulating simulatingState ->
                     if ballsStoppedMoving newModel.world then
+                        -- TODO: Possibly add effect that indicates simulation has completed.
                         case EightBall.playerShot (List.reverse simulatingState.events) simulatingState.pool of
                             IllegalBreak newPool ->
-                                { newModel
+                                ( { newModel
                                     | world = Bodies.world -- Reset the table.
                                     , state = initialPlacingBallState PlacingBehindHeadString (EightBall.rack time newPool)
                                     , focalPointTimeline =
                                         Animator.go Animator.quickly
                                             Point3d.origin
                                             newModel.focalPointTimeline
-                                }
+                                  }
+                                , NoEffect
+                                )
 
                             PlayersFault newPool ->
-                                { newModel
+                                ( { newModel
                                     | state = initialPlacingBallState PlacingBallInHand newPool
                                     , world = World.keepIf (\b -> Body.data b /= CueBall) newModel.world
                                     , focalPointTimeline =
                                         Animator.go Animator.quickly
                                             Point3d.origin
                                             newModel.focalPointTimeline
-                                }
+                                  }
+                                , NoEffect
+                                )
 
                             NextShot newPool ->
                                 let
@@ -811,22 +775,26 @@ update msg model =
                                             |> Maybe.map (\b -> Frame3d.originPoint (Body.frame b))
                                             |> Maybe.withDefault Point3d.origin
                                 in
-                                { newModel
+                                ( { newModel
                                     | state = initialPlayingState cuePosition newPool
                                     , focalPointTimeline =
                                         Animator.go Animator.quickly
                                             cuePosition
                                             newModel.focalPointTimeline
-                                }
+                                  }
+                                , NoEffect
+                                )
 
                             EightBall.GameOver newPool { winner } ->
-                                { newModel
+                                ( { newModel
                                     | state = GameOver newPool winner
                                     , focalPointTimeline =
                                         Animator.go Animator.quickly
                                             Point3d.origin
                                             newModel.focalPointTimeline
-                                }
+                                  }
+                                , NoEffect
+                                )
 
                     else
                         let
@@ -836,16 +804,22 @@ update msg model =
                             newSimulatingState =
                                 { simulatingState | events = newEvents }
                         in
-                        { newModel
+                        ( { newModel
                             | state = Simulating newSimulatingState
                             , world = newWorld
-                        }
+                          }
+                        , NoEffect
+                        )
 
                 _ ->
-                    newModel
+                    ( newModel
+                    , NoEffect
+                    )
 
         Resize width height ->
-            { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
+            ( { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
+            , NoEffect
+            )
 
         MouseWheel deltaY ->
             let
@@ -855,52 +829,48 @@ update msg model =
                 newZoom =
                     clamp 0 1 (cameraSettings.zoom - deltaY * 0.002)
             in
-            { model
+            ( { model
                 | cameraTimeline =
                     Animator.interrupt
                         [ Animator.event Animator.immediately
                             { cameraSettings | zoom = newZoom }
                         ]
                         model.cameraTimeline
-            }
+              }
+            , NoEffect
+            )
 
-        MouseDown mouse ->
+        MouseDown mousePixels ->
+            let
+                mouse =
+                    Point2d.fromPixels mousePixels
+            in
             case model.state of
                 PlacingBallInHand { pool } ->
                     case canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world of
                         CanSpawnAt position ->
-                            { model
-                                | state = initialPlayingState position (EightBall.placeBallInHand model.time pool)
-                                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
-                                , focalPointTimeline =
-                                    Animator.go Animator.quickly
-                                        position
-                                        model.focalPointTimeline
-                            }
+                            updatePlacedBallInHand position model
 
                         CannotSpawn _ ->
-                            model
+                            ( model, NoEffect )
 
                         HoveringOuside ->
-                            { model | orbiting = Just mouse }
+                            ( { model | orbiting = Just mouse }
+                            , NoEffect
+                            )
 
                 PlacingBehindHeadString { pool } ->
                     case canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world of
                         CanSpawnAt position ->
-                            { model
-                                | state = initialPlayingState position (EightBall.placeBallBehindHeadstring model.time pool)
-                                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
-                                , focalPointTimeline =
-                                    Animator.go Animator.quickly
-                                        position
-                                        model.focalPointTimeline
-                            }
+                            updatePlacedBallBehindHeadstring position model
 
                         CannotSpawn _ ->
-                            model
+                            ( model, NoEffect )
 
                         HoveringOuside ->
-                            { model | orbiting = Just mouse }
+                            ( { model | orbiting = Just mouse }
+                            , NoEffect
+                            )
 
                 Playing playingState ->
                     case World.raycast (ray model mouse) model.world of
@@ -932,7 +902,7 @@ update msg model =
                                     in
                                     -- Can only click on the visible hemisphere
                                     if abs hitRelativeAzimuthDegrees < 90 then
-                                        { model
+                                        ( { model
                                             | state =
                                                 Playing
                                                     { playingState
@@ -940,29 +910,47 @@ update msg model =
                                                         , hitElevation = hitElevation
                                                         , hitRelativeAzimuth = hitRelativeAzimuth
                                                     }
-                                        }
+                                          }
+                                        , NoEffect
+                                        )
 
                                     else
-                                        { model | orbiting = Just mouse }
+                                        ( { model | orbiting = Just mouse }
+                                        , NoEffect
+                                        )
 
                                 _ ->
-                                    { model | orbiting = Just mouse }
+                                    ( { model | orbiting = Just mouse }
+                                    , NoEffect
+                                    )
 
                         Nothing ->
-                            { model | orbiting = Just mouse }
+                            ( { model | orbiting = Just mouse }
+                            , NoEffect
+                            )
 
                 Simulating _ ->
-                    { model | orbiting = Just mouse }
+                    ( { model | orbiting = Just mouse }
+                    , NoEffect
+                    )
 
                 GameOver _ _ ->
-                    { model | orbiting = Just mouse }
+                    ( { model | orbiting = Just mouse }
+                    , NoEffect
+                    )
 
-        MouseMove mouse ->
+        MouseMove mousePixels ->
+            let
+                mouse =
+                    Point2d.fromPixels mousePixels
+            in
             case model.orbiting of
                 Just from ->
                     let
                         { x, y } =
-                            Vector2d.toPixels (Vector2d.from from mouse)
+                            mouse
+                                |> Vector2d.from from
+                                |> Vector2d.toPixels
 
                         cameraSettings =
                             currentCamera model.cameraTimeline
@@ -991,7 +979,7 @@ update msg model =
                                             (Angle.degrees 90)
                             }
                     in
-                    { model
+                    ( { model
                         | orbiting = Just mouse
                         , cameraTimeline =
                             Animator.interrupt
@@ -999,7 +987,9 @@ update msg model =
                                     newCamera
                                 ]
                                 model.cameraTimeline
-                    }
+                      }
+                    , NoEffect
+                    )
 
                 Nothing ->
                     case model.state of
@@ -1010,7 +1000,9 @@ update msg model =
                                     , mouse = canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world
                                     }
                             in
-                            { model | state = PlacingBallInHand newPlacingState }
+                            ( { model | state = PlacingBallInHand newPlacingState }
+                            , NoEffect
+                            )
 
                         PlacingBehindHeadString { pool } ->
                             let
@@ -1019,7 +1011,9 @@ update msg model =
                                     , mouse = canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world
                                     }
                             in
-                            { model | state = PlacingBehindHeadString newPlacingState }
+                            ( { model | state = PlacingBehindHeadString newPlacingState }
+                            , NoEffect
+                            )
 
                         Playing playingState ->
                             case playingState.mouse of
@@ -1043,23 +1037,31 @@ update msg model =
                                                         |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
                                             }
                                     in
-                                    { model | state = Playing newPlayingState }
+                                    ( { model | state = Playing newPlayingState }
+                                    , NoEffect
+                                    )
 
                                 _ ->
                                     case World.raycast (ray model mouse) model.world of
                                         Just raycastResult ->
                                             case Body.data raycastResult.body of
                                                 CueBall ->
-                                                    { model | state = Playing { playingState | mouse = HoveringCueBall } }
+                                                    ( { model | state = Playing { playingState | mouse = HoveringCueBall } }
+                                                    , NoEffect
+                                                    )
 
                                                 _ ->
-                                                    { model | state = Playing { playingState | mouse = NothingMeaningful } }
+                                                    ( { model | state = Playing { playingState | mouse = NothingMeaningful } }
+                                                    , NoEffect
+                                                    )
 
                                         Nothing ->
-                                            { model | state = Playing { playingState | mouse = NothingMeaningful } }
+                                            ( { model | state = Playing { playingState | mouse = NothingMeaningful } }
+                                            , NoEffect
+                                            )
 
                         _ ->
-                            model
+                            ( model, NoEffect )
 
         MouseUp ->
             case model.state of
@@ -1068,13 +1070,25 @@ update msg model =
                         newPlayingState =
                             { playingState | mouse = NothingMeaningful }
                     in
-                    { model
+                    ( { model
                         | state = Playing newPlayingState
                         , orbiting = Nothing
-                    }
+                      }
+                    , CueMove
+                        (Just
+                            { cueElevation = playingState.cueElevation
+                            , hitElevation = playingState.hitElevation
+                            , hitRelativeAzimuth = playingState.hitRelativeAzimuth
+                            }
+                        )
+                        (Animator.current model.cameraTimeline)
+                    )
 
                 _ ->
-                    { model | orbiting = Nothing }
+                    ( { model | orbiting = Nothing }
+                    , CueMove Nothing
+                        (Animator.current model.cameraTimeline)
+                    )
 
         ShootButtonDown ->
             case model.state of
@@ -1095,16 +1109,18 @@ update msg model =
                                                 Just (Duration.milliseconds 0)
                                         }
                                 in
-                                { model | state = Playing newPlayingState }
+                                ( { model | state = Playing newPlayingState }
+                                , NoEffect
+                                )
 
                             _ ->
-                                model
+                                ( model, NoEffect )
 
                     else
-                        model
+                        ( model, NoEffect )
 
                 _ ->
-                    model
+                    ( model, NoEffect )
 
         ShootButtonUp ->
             case model.state of
@@ -1119,60 +1135,139 @@ update msg model =
                     if canShoot axis model.world then
                         case playingState.shootButton of
                             Just duration ->
-                                { model
-                                    | state = initialSimulatingState playingState.pool
-                                    , cameraTimeline =
-                                        Animator.go Animator.verySlowly
-                                            { cameraSettings
-                                                | zoom = 1
-                                                , elevation = Angle.degrees 50
-                                            }
-                                            model.cameraTimeline
-                                    , world =
-                                        World.update
-                                            (\b ->
-                                                if Body.data b == CueBall then
-                                                    let
-                                                        force =
-                                                            Quantity.interpolateFrom
-                                                                (Force.newtons 10)
-                                                                (if EightBall.isBreak playingState.pool then
-                                                                    -- Make break a bit stronger
-                                                                    Force.newtons 100
-
-                                                                 else
-                                                                    Force.newtons 60
-                                                                )
-                                                                (shootingStrength duration)
-                                                    in
-                                                    Body.applyImpulse
-                                                        (Quantity.times (Duration.milliseconds 16) force)
-                                                        (Axis3d.reverse axis |> Axis3d.direction)
-                                                        (Axis3d.originPoint axis)
-                                                        b
-
-                                                else
-                                                    b
-                                            )
-                                            model.world
-                                }
+                                updateShoot axis duration cameraSettings model
 
                             Nothing ->
-                                model
+                                ( model, NoEffect )
 
                     else
-                        { model | state = Playing { playingState | shootButton = Nothing } }
+                        ( { model | state = Playing { playingState | shootButton = Nothing } }
+                        , NoEffect
+                        )
 
                 _ ->
-                    model
+                    ( model, NoEffect )
 
-        StartNewGameButtonClicked ->
-            initial model.ballTextures
-                model.roughnessTexture
-                (Tuple.mapBoth Quantity.unwrap
-                    Quantity.unwrap
-                    model.dimensions
-                )
+
+updatePlacedBallInHand : Point3d Meters WorldCoordinates -> Model -> ( Model, Effect )
+updatePlacedBallInHand position model =
+    case model.state of
+        PlacingBallInHand { pool } ->
+            ( { model
+                | state = initialPlayingState position (EightBall.placeBallInHand model.time pool)
+                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+                , focalPointTimeline =
+                    Animator.go Animator.quickly
+                        position
+                        model.focalPointTimeline
+              }
+            , SetBallInHandPlace position
+            )
+
+        _ ->
+            ( model, NoEffect )
+
+
+updatePlacedBallBehindHeadstring : Point3d Meters WorldCoordinates -> Model -> ( Model, Effect )
+updatePlacedBallBehindHeadstring position model =
+    case model.state of
+        PlacingBehindHeadString { pool } ->
+            ( { model
+                | state = initialPlayingState position (EightBall.placeBallBehindHeadstring model.time pool)
+                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+                , focalPointTimeline =
+                    Animator.go Animator.quickly
+                        position
+                        model.focalPointTimeline
+              }
+            , SetBehindHeadStringPlace position
+            )
+
+        _ ->
+            ( model, NoEffect )
+
+
+updateShoot : Axis3d Meters WorldCoordinates -> Duration -> Camera -> Model -> ( Model, Effect )
+updateShoot axis duration newCamera model =
+    case model.state of
+        Playing playingState ->
+            ( { model
+                | state = initialSimulatingState playingState.pool
+                , cameraTimeline =
+                    model.cameraTimeline
+                        |> Animator.interrupt
+                            [ Animator.event Animator.immediately
+                                newCamera
+                            ]
+                        |> Animator.go Animator.verySlowly
+                            { newCamera
+                                | zoom = 1
+                                , elevation = Angle.degrees 50
+                            }
+                , world =
+                    World.update
+                        (\b ->
+                            if Body.data b == CueBall then
+                                let
+                                    force =
+                                        Quantity.interpolateFrom
+                                            (Force.newtons 10)
+                                            (if EightBall.isBreak playingState.pool then
+                                                -- Make break a bit stronger
+                                                Force.newtons 100
+
+                                             else
+                                                Force.newtons 60
+                                            )
+                                            (shootingStrength duration)
+                                in
+                                Body.applyImpulse
+                                    (Quantity.times (Duration.milliseconds 16) force)
+                                    (Axis3d.reverse axis |> Axis3d.direction)
+                                    (Axis3d.originPoint axis)
+                                    b
+
+                            else
+                                b
+                        )
+                        model.world
+              }
+            , Shoot axis duration newCamera
+            )
+
+        _ ->
+            ( model, NoEffect )
+
+
+updateCueMove : Maybe CueData -> Camera -> Model -> ( Model, Effect )
+updateCueMove maybeCueData newCamera model =
+    let
+        newCameraTimeline =
+            Animator.go (Animator.millis 200)
+                newCamera
+                model.cameraTimeline
+    in
+    case ( model.state, maybeCueData ) of
+        ( Playing playingState, Just { cueElevation, hitElevation, hitRelativeAzimuth } ) ->
+            ( { model
+                | state =
+                    Playing
+                        { playingState
+                            | cueElevation = cueElevation
+                            , hitElevation = hitElevation
+                            , hitRelativeAzimuth = hitRelativeAzimuth
+                        }
+                , cameraTimeline = newCameraTimeline
+              }
+            , NoEffect
+            )
+
+        _ ->
+            ( { model
+                | cameraTimeline = newCameraTimeline
+              }
+            , NoEffect
+            )
 
 
 shootingStrength : Duration -> Float
@@ -1404,9 +1499,15 @@ intersectionWithRectangle axis rectangle =
             Nothing
 
 
-decodeMouse : (Point2d Pixels ScreenCoordinates -> Msg) -> Json.Decode.Decoder Msg
+decodeMouse :
+    ({ x : Float
+     , y : Float
+     }
+     -> Msg
+    )
+    -> Json.Decode.Decoder Msg
 decodeMouse msg =
-    Json.Decode.map2 (\x y -> msg (Point2d.pixels x y))
+    Json.Decode.map2 (\x y -> msg { x = x, y = y })
         (Json.Decode.field "pageX" Json.Decode.float)
         (Json.Decode.field "pageY" Json.Decode.float)
 
