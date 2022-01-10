@@ -2,7 +2,7 @@ module Backend exposing (app)
 
 import Dict
 import Guid
-import Lamdera exposing (ClientId, SessionId, broadcast, sendToFrontend)
+import Lamdera exposing (ClientId, SessionId)
 import Random
 import Types exposing (..)
 
@@ -52,11 +52,6 @@ updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd
 updateFromFrontend sessionId clientId msg model =
     case msg of
         GenerateLink ->
-            -- TODO: Generate link
-            let
-                generatedLink =
-                    "asdf"
-            in
             ( model
             , Random.generate (RandomGeneratedLinkBackend clientId) Guid.generator
             )
@@ -106,7 +101,7 @@ updateFromFrontend sessionId clientId msg model =
                     , Lamdera.sendToFrontend otherClientId (OtherPlayerAction action)
                     )
 
-                ( _, _ ) ->
+                _ ->
                     ( model, Cmd.none )
 
 

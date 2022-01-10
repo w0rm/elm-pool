@@ -4,8 +4,7 @@ import Browser
 import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Nav
-import Color exposing (Color)
-import Dict exposing (Dict)
+import Dict
 import Game
 import Guid exposing (Guid)
 import Html exposing (Html)
@@ -18,7 +17,7 @@ import Scene3d.Material as Material
 import Task
 import Types exposing (..)
 import Url exposing (Url)
-import WebGL.Texture exposing (Texture, defaultOptions)
+import WebGL.Texture exposing (defaultOptions)
 
 
 app =
@@ -57,7 +56,7 @@ unwrapGameModel model =
         Running gameModel ->
             Just gameModel
 
-        NetworkPlay _ gameModel _ playerActions ->
+        NetworkPlay _ gameModel _ _ ->
             Just gameModel
 
         Failed _ ->
@@ -552,13 +551,13 @@ update msg model =
 
         Tick newTime ->
             case model.status of
-                Loading loadingModel url ->
+                Loading _ _ ->
                     ( model, Cmd.none )
 
-                StartMenu generateLinkStatus modelGame ->
+                StartMenu _ _ ->
                     ( model, Cmd.none )
 
-                Running gameModel ->
+                Running _ ->
                     ( model, Cmd.none )
 
                 NetworkPlay guid gameModel player playerActions ->
@@ -580,7 +579,7 @@ update msg model =
                             , Cmd.none
                             )
 
-                Failed string ->
+                Failed _ ->
                     ( model, Cmd.none )
 
         -- Routing

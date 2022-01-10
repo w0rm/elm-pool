@@ -846,7 +846,7 @@ update msg model =
                     Point2d.fromPixels mousePixels
             in
             case model.state of
-                PlacingBallInHand { pool } ->
+                PlacingBallInHand _ ->
                     case canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world of
                         CanSpawnAt position ->
                             updatePlacedBallInHand position model
@@ -859,7 +859,7 @@ update msg model =
                             , NoEffect
                             )
 
-                PlacingBehindHeadString { pool } ->
+                PlacingBehindHeadString _ ->
                     case canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world of
                         CanSpawnAt position ->
                             updatePlacedBallBehindHeadstring position model

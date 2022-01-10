@@ -1,6 +1,5 @@
 module Types exposing (..)
 
-import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
 import Browser
 import Browser.Dom
@@ -17,7 +16,7 @@ import Point3d exposing (Point3d)
 import Scene3d.Material as Material
 import Time
 import Url exposing (Url)
-import WebGL.Texture exposing (Texture, defaultOptions)
+import WebGL.Texture
 
 
 type alias FrontendModel =
