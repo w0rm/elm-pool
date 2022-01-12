@@ -24,6 +24,12 @@ jobs:
 
       - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.5.0 elm-format@0.8.5 uglify-js@3.4.7
 
+      - run: |
+          curl https://static.lamdera.com/bin/linux/lamdera -o ~/lamdera
+          chmod a+x ~/lamdera
+
+      - run: lamdera check
+
       - run: elm-format --validate src/*.elm
 
       - run: elm-review
