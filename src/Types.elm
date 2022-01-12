@@ -71,7 +71,7 @@ type FrontendMsg
     | GotRoughnessTexture (Result WebGL.Texture.Error (Material.Texture Float))
     | RunningMsg Game.Msg
     | MyPlayerRunningMsg Game.Msg
-    | NoOpFrontendMsg
+      -- | NoOpFrontendMsg -- Add back when needed.
     | LocalPlaySelected
     | NetworkPlaySelected
     | Tick Time.Posix
@@ -94,8 +94,8 @@ type PlayerAction
 
 
 type BackendMsg
-    = NoOpBackendMsg
-    | RandomGeneratedLinkBackend ClientId Guid
+    = --NoOpBackendMsg -- Add back when needed.
+      RandomGeneratedLinkBackend ClientId Guid
 
 
 type ToFrontend

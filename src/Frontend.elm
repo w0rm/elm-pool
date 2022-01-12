@@ -111,12 +111,10 @@ view model =
         Running gameModel ->
             Html.map RunningMsg (Game.view gameModel)
 
-        NetworkPlay guid gameModel player playerActions ->
+        NetworkPlay _ gameModel player _ ->
             viewNetworkPlay
-                guid
                 gameModel
                 player
-                playerActions
 
         Loading _ _ ->
             Html.text "Loading..."
@@ -292,16 +290,16 @@ viewLinkGenerated url link =
 -- Network play
 
 
-viewNetworkPlay : Guid -> Game.Model -> Player -> List PlayerAction -> Html Msg
-viewNetworkPlay guid gameModel player playerActions =
+viewNetworkPlay : Game.Model -> Player -> Html Msg
+viewNetworkPlay gameModel player =
     Html.div []
-        [ viewGame guid gameModel player playerActions
+        [ viewGame gameModel player
         , viewCurrentStatus gameModel player
         ]
 
 
-viewGame : Guid -> Game.Model -> Player -> List PlayerAction -> Html Msg
-viewGame guid gameModel player playerActions =
+viewGame : Game.Model -> Player -> Html Msg
+viewGame gameModel player =
     let
         maybeCurrentPlayer =
             fromGamePlayer (Game.currentPlayer gameModel)
@@ -510,9 +508,6 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
-
-        NoOpFrontendMsg ->
-            ( model, Cmd.none )
 
         LocalPlaySelected ->
             case model.status of

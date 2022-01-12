@@ -63,7 +63,7 @@ import Viewpoint3d
 
 
 type ScreenCoordinates
-    = ScreenCoordinates
+    = ScreenCoordinates Never
 
 
 type alias Model =
@@ -668,7 +668,7 @@ subscriptions _ =
 
 
 subscriptionsSimulating : Model -> Sub Msg
-subscriptionsSimulating model =
+subscriptionsSimulating _ =
     Sub.batch
         [ Browser.Events.onResize Resize
         , Browser.Events.onAnimationFrame Tick

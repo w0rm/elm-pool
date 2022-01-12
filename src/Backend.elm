@@ -32,9 +32,6 @@ init =
 update : BackendMsg -> Model -> ( Model, Cmd BackendMsg )
 update msg model =
     case msg of
-        NoOpBackendMsg ->
-            ( model, Cmd.none )
-
         RandomGeneratedLinkBackend clientId generatedLink ->
             ( { model
                 | links =
@@ -49,7 +46,7 @@ update msg model =
 
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
-updateFromFrontend sessionId clientId msg model =
+updateFromFrontend _ clientId msg model =
     case msg of
         GenerateLink ->
             ( model
@@ -112,7 +109,9 @@ playLinkSetSharedTo clientId playLink =
     }
 
 
-subscriptions model =
-    Sub.batch
-        [--Lamdera.onConnect ClientConnected
-        ]
+subscriptions : Model -> Sub BackendMsg
+subscriptions _ =
+    -- Sub.batch
+    --     [--Lamdera.onConnect ClientConnected
+    --     ]
+    Sub.none

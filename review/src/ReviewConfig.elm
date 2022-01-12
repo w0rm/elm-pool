@@ -34,9 +34,15 @@ config =
     , NoUnused.CustomTypeConstructorArgs.rule
     , NoUnused.Dependencies.rule
     , NoUnused.Exports.rule
+        |> Review.Rule.ignoreErrorsForFiles
+            [ "src/Backend.elm" -- `app` must be exported for Lamdera.
+            , "src/Frontend.elm" -- `app` must be exported for Lamdera.
+            ]
     , NoUnused.Modules.rule
         |> Review.Rule.ignoreErrorsForFiles
-            [ "src/Env.elm" -- This file is required for Lamdera.
+            [ "src/Backend.elm" -- This file is required for Lamdera.
+            , "src/Env.elm" -- This file is required for Lamdera.
+            , "src/Frontend.elm" -- This file is required for Lamdera.
             ]
     , NoUnused.Parameters.rule
     , NoUnused.Patterns.rule
