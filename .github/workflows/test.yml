@@ -22,10 +22,21 @@ jobs:
             elm-stuff
           key: ${{ runner.os }}-cache
 
-      - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.5.0 elm-format@0.8.5
+      - run: npm install -g elm@latest-0.19.1 elm-review@2.5.0 elm-format@0.8.5
 
-      - run: elm-format --validate .
+      - run: |
+          curl -L -o elm-test-rs.tar.gz https://github.com/mpizenberg/elm-test-rs/releases/download/v2.0/elm-test-rs_linux.tar.gz
+          tar -xf elm-test-rs.tar.gz
+          chmod a+x elm-test-rs
+
+      - run: |
+          curl https://static.lamdera.com/bin/linux/lamdera -o ~/lamdera
+          chmod a+x ~/lamdera
+
+      - run: ~/lamdera make src/Frontend.elm
+
+      - run: elm-format --validate src/*.elm
 
       - run: elm-review
 
-      - run: elm-test
+      - run: ./elm-test-rs
