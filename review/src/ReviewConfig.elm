@@ -32,7 +32,8 @@ config =
           }
         ]
     , NoUnused.CustomTypeConstructorArgs.rule
-    , NoUnused.Dependencies.rule
+
+    -- , NoUnused.Dependencies.rule -- This currently fails because of lamdera/*
     , NoUnused.Exports.rule
         |> Review.Rule.ignoreErrorsForFiles
             [ "src/Backend.elm" -- `app` must be exported for Lamdera.
