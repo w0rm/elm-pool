@@ -5,6 +5,7 @@ import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Nav
 import Dict
+import Env
 import Game
 import Guid exposing (Guid)
 import Html exposing (Html)
@@ -158,7 +159,7 @@ fontStyle : Html msg
 fontStyle =
     Html.node "style"
         []
-        [ Html.text """
+        [ Html.text <| """
 @font-face {
     font-family: 'Teko';
     src: url('/assets/Teko-Medium.woff2') format('woff2'),
