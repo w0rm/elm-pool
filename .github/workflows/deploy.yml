@@ -22,12 +22,7 @@ jobs:
             elm-stuff
           key: ${{ runner.os }}-cache
 
-      - run: npm install -g elm@latest-0.19.1 elm-review@2.5.0 elm-format@0.8.5 uglify-js@3.4.7
-
-      - run: |
-          curl -L -o elm-test-rs.tar.gz https://github.com/mpizenberg/elm-test-rs/releases/download/v2.0/elm-test-rs_linux.tar.gz
-          tar -xf elm-test-rs.tar.gz
-          chmod a+x elm-test-rs
+      - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.7.0 elm-format@0.8.5 uglify-js@3.4.7
 
       - run: |
           curl https://static.lamdera.com/bin/linux/lamdera -o ~/lamdera
@@ -35,18 +30,22 @@ jobs:
 
       - run: ~/lamdera make src/Frontend.elm
 
-      - run: elm-format --validate src/*.elm
+      - run: elm-format --validate full-stack/src/*.elm lib/src/*.elm standalone/src/*.elm
 
-      - run: elm-review
+      - run: cd lib && elm-review
 
-      - run: ./elm-test-rs
+      - run: cd standalone && elm-review
+
+      - run: cd full-stack && elm-review
+
+      - run: cd ~/lib && elm-test
 
       - run: |
           mkdir -p dest
-          elm make src/Main.elm --output dest/elm-temp.js
+          elm make standalone/src/Main.elm --output dest/elm-temp.js
           uglifyjs dest/elm-temp.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dest/elm.js
           rm dest/elm-temp.js
-          cp -R index.html src/img src/assets dest
+          cp -R index.html standalone/public/img standalone/public/assets dest
 
       - uses: josephbmanley/butler-publish-itchio-action@master
         env:

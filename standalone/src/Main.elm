@@ -8,6 +8,8 @@ import Game
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Json.Decode
+import Json.Encode
 import Pixels
 import Scene3d.Material as Material
 import Task
@@ -16,7 +18,7 @@ import WebGL.Texture exposing (defaultOptions)
 
 type Model
     = Loading LoadingModel
-    | Running Game.Model
+    | Running String Game.Model
     | Failed String
 
 
@@ -32,10 +34,11 @@ type alias LoadingModel =
     { ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Maybe (Material.Texture Float)
     , dimensions : Maybe ( Float, Float )
+    , assetsPath : String
     }
 
 
-main : Program () Model Msg
+main : Program Json.Encode.Value Model Msg
 main =
     Browser.element
         { init = init
@@ -43,7 +46,7 @@ main =
         , subscriptions =
             \model ->
                 case model of
-                    Running m ->
+                    Running _ m ->
                         Sub.map RunningMsg (Game.subscriptions m)
 
                     _ ->
@@ -52,12 +55,39 @@ main =
         }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
+type alias Flags =
+    { assetsPath : Maybe String
+    }
+
+
+flagsDecoder : Json.Decode.Decoder Flags
+flagsDecoder =
+    Json.Decode.map Flags
+        assetsPathDecoder
+
+
+assetsPathDecoder : Json.Decode.Decoder (Maybe String)
+assetsPathDecoder =
+    Json.Decode.maybe <|
+        Json.Decode.field "assetsPath" Json.Decode.string
+
+
+init : Json.Encode.Value -> ( Model, Cmd Msg )
+init unsafeFlags =
+    let
+        flags =
+            unsafeFlags
+                |> Json.Decode.decodeValue flagsDecoder
+                |> Result.withDefault { assetsPath = Nothing }
+
+        assetsPath =
+            Maybe.withDefault "/public/" flags.assetsPath
+    in
     ( Loading
         { dimensions = Nothing
         , roughnessTexture = Nothing
         , ballTextures = Dict.empty
+        , assetsPath = assetsPath
         }
     , Cmd.batch
         [ Cmd.batch
@@ -65,12 +95,12 @@ init _ =
                 (\number ->
                     Material.loadWith
                         { defaultOptions | minify = WebGL.Texture.linear }
-                        ("img/balls/" ++ String.fromInt number ++ ".png")
+                        (assetsPath ++ "img/balls/" ++ String.fromInt number ++ ".png")
                         |> Task.attempt (GotBallTexture number)
                 )
                 (List.range 1 15)
             )
-        , Task.attempt GotRoughnessTexture (Material.load "img/roughness.jpg")
+        , Task.attempt GotRoughnessTexture (Material.load (assetsPath ++ "img/roughness.jpg"))
         , Task.perform GotInitialViewport Browser.Dom.getViewport
         ]
     )
@@ -79,11 +109,12 @@ init _ =
 view : Model -> Html Msg
 view model =
     case model of
-        Running gameModel ->
+        Running assetsPath gameModel ->
             Html.div
                 []
                 [ Html.map RunningMsg (Game.view gameModel)
                 , viewCurrentStatus gameModel
+                    assetsPath
                 ]
 
         Loading _ ->
@@ -97,8 +128,8 @@ view model =
 -- View Current Status
 
 
-viewCurrentStatus : Game.Model -> Html Msg
-viewCurrentStatus gameModel =
+viewCurrentStatus : Game.Model -> String -> Html Msg
+viewCurrentStatus gameModel assetsPath =
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "bottom" "0"
@@ -106,16 +137,7 @@ viewCurrentStatus gameModel =
         ]
         [ Html.node "style"
             []
-            [ Html.text """
-@font-face {
-    font-family: 'Teko';
-    src: url('assets/Teko-Medium.woff2') format('woff2'),
-        url('assets/Teko-Medium.woff') format('woff');
-    font-weight: 500;
-    font-style: normal;
-    font-display: block;
-}
-"""
+            [ Html.text (fontStyle assetsPath)
             ]
         , case gameModel.state of
             Game.GameOver _ _ ->
@@ -191,6 +213,24 @@ viewGameOver gameModel =
         ]
 
 
+fontStyle : String -> String
+fontStyle path =
+    """
+@font-face {
+    font-family: 'Teko';
+    src: url('""" ++ path ++ """assets/Teko-Medium.woff2') format('woff2'),
+        url('""" ++ path ++ """assets/Teko-Medium.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+    font-display: block;
+}
+"""
+
+
+
+-- Update
+
+
 update : Msg -> Model -> Model
 update msg model =
     case ( msg, model ) of
@@ -222,19 +262,19 @@ update msg model =
                 Err _ ->
                     Failed "Failed to load roughness texture"
 
-        ( RunningMsg runningMsg, Running runningModel ) ->
+        ( RunningMsg runningMsg, Running assetsPath runningModel ) ->
             let
                 ( newGameModel, _ ) =
                     Game.update runningMsg runningModel
             in
-            Running newGameModel
+            Running assetsPath newGameModel
 
-        ( StartNewGameButtonClicked, Running gameModel ) ->
+        ( StartNewGameButtonClicked, Running assetsPath gameModel ) ->
             let
                 ( x, y ) =
                     gameModel.dimensions
             in
-            Running <|
+            Running assetsPath <|
                 Game.initial
                     gameModel.ballTextures
                     gameModel.roughnessTexture
@@ -252,7 +292,7 @@ loadComplete model =
         Maybe.map2 (Game.initial model.ballTextures)
             model.roughnessTexture
             model.dimensions
-            |> Maybe.map Running
+            |> Maybe.map (Running model.assetsPath)
             |> Maybe.withDefault (Loading model)
 
     else

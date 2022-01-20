@@ -1,14 +1,15 @@
 {
     "type": "application",
     "source-directories": [
+        "../lib/src",
         "src",
-        "vendor/elm-3d-camera/src",
-        "vendor/elm-3d-scene/src",
-        "vendor/elm-animator/src",
-        "vendor/elm-geometry/src",
-        "vendor/elm-geometry-linear-algebra-interop/src",
-        "vendor/elm-physics/src",
-        "vendor/elm-units-interval/src"
+        "../vendor/elm-3d-camera/src",
+        "../vendor/elm-3d-scene/src",
+        "../vendor/elm-animator/src",
+        "../vendor/elm-geometry/src",
+        "../vendor/elm-geometry-linear-algebra-interop/src",
+        "../vendor/elm-physics/src",
+        "../vendor/elm-units-interval/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
