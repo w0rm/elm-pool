@@ -28,7 +28,7 @@ jobs:
           curl https://static.lamdera.com/bin/linux/lamdera -o ~/lamdera
           chmod a+x ~/lamdera
 
-      - run: ~/lamdera make full-stack/src/Frontend.elm
+      - run: cd full-stack && ~/lamdera make src/Frontend.elm
 
       - run: elm-format --validate full-stack/src/*.elm lib/src/*.elm standalone/src/*.elm
 
@@ -42,7 +42,9 @@ jobs:
 
       - run: |
           mkdir -p dest
-          elm make standalone/src/Main.elm --output dest/elm-temp.js
+          cd standalone
+          elm make src/Main.elm --output ../dest/elm-temp.js
+          cd ..
           uglifyjs dest/elm-temp.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dest/elm.js
           rm dest/elm-temp.js
           cp -R index.html standalone/public/img standalone/public/assets dest
