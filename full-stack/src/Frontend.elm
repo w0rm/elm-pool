@@ -5,7 +5,6 @@ import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Nav
 import Dict
-import Env
 import Game
 import Guid exposing (Guid)
 import Html exposing (Html)
