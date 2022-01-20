@@ -28,7 +28,7 @@ jobs:
           curl https://static.lamdera.com/bin/linux/lamdera -o ~/lamdera
           chmod a+x ~/lamdera
 
-      - run: ~/lamdera make src/Frontend.elm
+      - run: ~/lamdera make full-stack/src/Frontend.elm
 
       - run: elm-format --validate full-stack/src/*.elm lib/src/*.elm standalone/src/*.elm
 
@@ -38,7 +38,7 @@ jobs:
 
       - run: cd full-stack && elm-review
 
-      - run: cd ~/lib && elm-test
+      - run: cd lib && elm-test
 
       - run: |
           mkdir -p dest
