@@ -61,23 +61,10 @@ The game format is two (2) player 8-Ball. It is a simplified version of [WPA 8-B
   2. When a player has pocketed all of their target balls and makes the 8-ball but scratches, they lose ✅
   3. If a player pockets the 8-ball before all of their target balls, they lose ✅
 
-
 ## Development
 
-### Standalone
-
-This version runs by itself in Elm 0.19.1. It will only allow local play.
-
 ```bash
-cd standalone && elm reactor
+elm reactor
 ```
 
-Open http://localhost:8000/standalone/src/Main.elm.
-
-### Full-stack (Lamdera)
-
-```bash
-cd full-stack && lamdera live
-```
-
-Open http://localhost:8000/.
+Open http://localhost:8000/src/Main.elm.
