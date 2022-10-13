@@ -24,30 +24,16 @@ jobs:
 
       - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.7.0 elm-format@0.8.5 uglify-js@3.4.7
 
-      - run: |
-          curl https://static.lamdera.com/bin/linux/lamdera -o ~/lamdera
-          chmod a+x ~/lamdera
+      - run: elm-format --validate src/*.elm
 
-      - run: cd full-stack && ~/lamdera make src/Frontend.elm
-
-      - run: elm-format --validate full-stack/src/*.elm lib/src/*.elm standalone/src/*.elm
-
-      - run: cd lib && elm-review
-
-      - run: cd standalone && elm-review
-
-      - run: cd full-stack && elm-review
-
-      - run: cd lib && elm-test
+      - run: elm-test
 
       - run: |
           mkdir -p dest
-          cd standalone
-          elm make src/Main.elm --output ../dest/elm-temp.js
-          cd ..
+          elm make src/Main.elm --output dest/elm-temp.js
           uglifyjs dest/elm-temp.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dest/elm.js
           rm dest/elm-temp.js
-          cp -R standalone/index.html standalone/public/img standalone/public/assets dest
+          cp -R index.html public dest
 
       - uses: josephbmanley/butler-publish-itchio-action@master
         env:

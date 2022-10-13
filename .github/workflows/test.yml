@@ -24,12 +24,8 @@ jobs:
 
       - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.7.0 elm-format@0.8.5
 
-      - run: elm-format --validate full-stack/src/*.elm lib/src/*.elm standalone/src/*.elm
+      - run: elm-format --validate src/*.elm
 
-      - run: cd lib && elm-review
+      - run: elm-review
 
-      - run: cd standalone && elm-review
-
-      - run: cd full-stack && elm-review
-
-      - run: cd lib && elm-test
+      - run: elm-test
