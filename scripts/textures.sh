@@ -40,7 +40,7 @@ EOF
   echo "$PS_CODE" \
   | sed "s/$${background}/$background/g;s/$${stripe}/$stripe/g;s/$${number}/$number/g;" \
   | gs -I$SCRIPTPATH/font -dSAFER -dQUIET -dBATCH -dNOPAUSE -sDEVICE=png16m -dGraphicsAlphaBits=4 -dTextAlphaBits=4 -sOutputFile=- -\
-  | pngquant --force --strip --speed=1 8 --output $SCRIPTPATH/../src/img/balls/$number.png -
+  | pngquant --force --strip --speed=1 8 --output $SCRIPTPATH/../public/img/balls/$number.png -
 }
 
 texture "1 0.843 0" "1 0.843 0" 1 # yellow
