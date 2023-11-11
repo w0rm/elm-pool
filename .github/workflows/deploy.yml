@@ -8,13 +8,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v1
+      - uses: actions/setup-node@v4
         with:
-          node-version: "12"
+          node-version: "20.x"
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: |
             ~/.npm
@@ -22,7 +22,7 @@ jobs:
             elm-stuff
           key: ${{ runner.os }}-cache
 
-      - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.7.0 elm-format@0.8.5 uglify-js@3.4.7
+      - run: npm install -g elm@0.19.1-6 elm-test@0.19.1-revision12 elm-review@2.10.3 elm-format@0.8.7 uglify-js@3.4.7
 
       - run: elm-format --validate src/*.elm
 

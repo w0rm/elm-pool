@@ -29,7 +29,7 @@ import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import Duration exposing (Duration, seconds)
-import EightBall exposing (AwaitingPlaceBallBehindHeadstring, AwaitingPlaceBallInHand, AwaitingPlayerShot, AwaitingStart, Pool, ShotEvent, WhatHappened(..))
+import EightBall exposing (AwaitingPlaceBallBehindHeadstring, AwaitingPlaceBallInHand, AwaitingPlayerShot, AwaitingStart, Player, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Frame3d
 import Html exposing (Html)
@@ -49,7 +49,7 @@ import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
 import Rectangle2d
-import Rectangle3d exposing (Rectangle3d, dimensions)
+import Rectangle3d exposing (Rectangle3d)
 import Scene3d
 import Scene3d.Light
 import Scene3d.Material as Material
@@ -91,7 +91,7 @@ type State
     | Playing PlayingState
     | Simulating SimulatingState
     | PlacingBallInHand (PlacingBallState AwaitingPlaceBallInHand)
-    | GameOver (EightBall.Pool AwaitingStart) Int
+    | GameOver (EightBall.Pool AwaitingStart) Player
 
 
 type alias PlayingState =
@@ -595,14 +595,9 @@ viewShootingStrength { state, dimensions } =
             Html.text ""
 
 
-currentPlayer : Model -> Int
+currentPlayer : Model -> Player
 currentPlayer model =
-    currentPlayerIndex model.state
-
-
-currentPlayerIndex : State -> Int
-currentPlayerIndex state =
-    case state of
+    case model.state of
         PlacingBehindHeadString { pool } ->
             EightBall.currentPlayer pool
 
