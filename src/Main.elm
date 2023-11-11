@@ -4,6 +4,7 @@ import Browser
 import Browser.Dom
 import Color exposing (Color)
 import Dict exposing (Dict)
+import EightBall exposing (Player(..))
 import Game
 import Html exposing (Html)
 import Html.Attributes
@@ -154,19 +155,12 @@ viewCurrentStatus gameModel assetsPath =
 
 currentPlayerString : Game.Model -> String
 currentPlayerString gameModel =
-    let
-        playerIndex =
-            Game.currentPlayer gameModel
-    in
-    case playerIndex of
-        0 ->
+    case Game.currentPlayer gameModel of
+        Player1 ->
             "Player 1"
 
-        1 ->
+        Player2 ->
             "Player 2"
-
-        _ ->
-            "Unknown"
 
 
 statusStyle : List (Html.Attribute Msg)

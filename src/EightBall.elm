@@ -1,6 +1,6 @@
 module EightBall exposing
     ( Pool, start, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart
-    , currentPlayer, currentScore
+    , Player(..), currentPlayer, currentScore
     , CurrentTarget(..), currentTarget
     , rack, placeBallBehindHeadstring, placeBallInHand, playerShot
     , ShotEvent
@@ -28,7 +28,7 @@ module EightBall exposing
 
 # View
 
-@docs currentPlayer, currentScore
+@docs Player, currentPlayer, currentScore
 
 @docs CurrentTarget, currentTarget
 
@@ -106,16 +106,6 @@ pocketedIn group pocketedBalls =
 type Player
     = Player1
     | Player2
-
-
-playerToInt : Player -> Int
-playerToInt player =
-    case player of
-        Player1 ->
-            0
-
-        Player2 ->
-            1
 
 
 switchPlayer : Player -> Player
@@ -300,18 +290,11 @@ start =
 -- View
 
 
-{-| Show the current player, if there is one.
-
-Zero-based:
-
-    Player1 == 0
-
-    Player2 == 1
-
+{-| Get the current player
 -}
-currentPlayer : Pool state -> Int
+currentPlayer : Pool state -> Player
 currentPlayer (Pool { player }) =
-    playerToInt player
+    player
 
 
 {-| Get the current score.
@@ -584,7 +567,7 @@ type WhatHappened
     = IllegalBreak (Pool AwaitingRack)
     | PlayersFault (Pool AwaitingPlaceBallInHand)
     | NextShot (Pool AwaitingPlayerShot)
-    | GameOver (Pool AwaitingStart) { winner : Int }
+    | GameOver (Pool AwaitingStart) { winner : Player }
 
 
 {-| Set game over via this function so we don't forget to add the internal event.
@@ -1008,14 +991,12 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                             poolData.player
                 in
                 GameOver (endGame (Pool poolData))
-                    { winner = playerToInt winningPlayer
-                    }
+                    { winner = winningPlayer }
 
             _ ->
                 -- If the player wasn't targeting the 8-ball, then they lose!
                 GameOver (endGame (Pool poolData))
-                    { winner = playerToInt (switchPlayer poolData.player)
-                    }
+                    { winner = switchPlayer poolData.player }
 
     else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
         PlayersFault

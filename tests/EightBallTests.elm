@@ -120,7 +120,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> EightBall.currentPlayer
-                                    |> Expect.equal 1
+                                    |> Expect.equal EightBall.Player2
 
                             other ->
                                 Expect.fail <|
@@ -148,7 +148,7 @@ suite =
                             EightBall.NextShot pool ->
                                 pool
                                     |> EightBall.currentPlayer
-                                    |> Expect.equal 1
+                                    |> Expect.equal EightBall.Player2
 
                             other ->
                                 Expect.fail <|
@@ -175,7 +175,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> EightBall.currentPlayer
-                                    |> Expect.equal 0
+                                    |> Expect.equal EightBall.Player1
 
                             other ->
                                 Expect.fail <|
@@ -199,7 +199,7 @@ suite =
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentTarget >> Expect.equal EightBall.Solids
-                                        , EightBall.currentPlayer >> Expect.equal 0
+                                        , EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         ]
 
                             other ->
@@ -274,7 +274,7 @@ suite =
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentTarget >> Expect.equal EightBall.OpenTable
-                                        , EightBall.currentPlayer >> Expect.equal 1
+                                        , EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         ]
 
                             other ->
@@ -307,7 +307,7 @@ suite =
                             EightBall.NextShot pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         , EightBall.currentTarget >> Expect.equal EightBall.EightBall
                                         ]
 
@@ -347,7 +347,7 @@ suite =
                             EightBall.NextShot pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         , EightBall.currentTarget >> Expect.equal EightBall.EightBall
                                         ]
 
@@ -393,7 +393,7 @@ suite =
                             EightBall.NextShot pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         , EightBall.currentTarget >> Expect.equal EightBall.EightBall
                                         ]
 
@@ -429,7 +429,7 @@ suite =
                         in
                         case nextAction of
                             EightBall.GameOver _ { winner } ->
-                                Expect.equal winner 0
+                                Expect.equal winner EightBall.Player1
 
                             other ->
                                 Expect.fail <|
@@ -481,7 +481,7 @@ suite =
                         in
                         case nextAction of
                             EightBall.GameOver _ { winner } ->
-                                Expect.equal winner 1
+                                Expect.equal winner EightBall.Player2
 
                             other ->
                                 Expect.fail <|
@@ -534,7 +534,7 @@ suite =
                         in
                         case nextAction of
                             EightBall.GameOver _ { winner } ->
-                                Expect.equal winner 0
+                                Expect.equal winner EightBall.Player1
 
                             other ->
                                 Expect.fail <|
@@ -586,7 +586,7 @@ suite =
                         in
                         case nextAction of
                             EightBall.GameOver _ { winner } ->
-                                Expect.equal winner 0
+                                Expect.equal winner EightBall.Player1
 
                             other ->
                                 Expect.fail <|
@@ -619,7 +619,7 @@ suite =
                         in
                         case nextAction of
                             EightBall.GameOver _ { winner } ->
-                                Expect.equal winner 1
+                                Expect.equal winner EightBall.Player2
 
                             other ->
                                 Expect.fail <|
@@ -643,7 +643,7 @@ suite =
                             EightBall.IllegalBreak pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -668,7 +668,7 @@ suite =
                             EightBall.IllegalBreak pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -714,7 +714,7 @@ suite =
                             EightBall.IllegalBreak pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -746,7 +746,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.Stripes
                                         ]
 
@@ -776,7 +776,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.Solids
                                         ]
 
@@ -831,7 +831,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 0
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
                                         , EightBall.currentTarget >> Expect.equal EightBall.Stripes
                                         ]
 
@@ -858,7 +858,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -889,7 +889,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -918,7 +918,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -947,7 +947,7 @@ suite =
                             EightBall.NextShot pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -976,7 +976,7 @@ suite =
                             EightBall.NextShot pool ->
                                 pool
                                     |> Expect.all
-                                        [ EightBall.currentPlayer >> Expect.equal 1
+                                        [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
                                         , EightBall.currentTarget >> Expect.equal EightBall.OpenTable
                                         ]
 
@@ -1003,7 +1003,7 @@ suite =
                             EightBall.PlayersFault pool ->
                                 pool
                                     |> EightBall.currentPlayer
-                                    |> Expect.equal 1
+                                    |> Expect.equal EightBall.Player2
 
                             other ->
                                 Expect.fail <|
@@ -1027,7 +1027,7 @@ suite =
                                 pool
                                     |> EightBall.placeBallInHand (Time.millisToPosix 800)
                                     |> EightBall.currentPlayer
-                                    |> Expect.equal 1
+                                    |> Expect.equal EightBall.Player2
 
                             other ->
                                 Expect.fail <|
