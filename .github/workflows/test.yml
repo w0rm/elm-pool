@@ -22,7 +22,7 @@ jobs:
             elm-stuff
           key: ${{ runner.os }}-cache
 
-      - run: npm install -g elm@latest-0.19.1 elm-test@0.19.1-revision6 elm-review@2.7.0 elm-format@0.8.5
+      - run: npm install -g elm@0.19.1-6 elm-test@0.19.1-revision12 elm-review@2.10.3 elm-format@0.8.7
 
       - run: elm-format --validate src/*.elm
 

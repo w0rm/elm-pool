@@ -15,6 +15,7 @@
             elm-format
             elm-test
             elm-review
+            elm-json
             nodePackages.uglify-js
             butler
             ghostscript  # for generating ball textures
