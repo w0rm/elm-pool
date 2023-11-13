@@ -61,7 +61,11 @@ The game format is two (2) player 8-Ball. It is a simplified version of [WPA 8-B
   2. When a player has pocketed all of their target balls and makes the 8-ball but scratches, they lose ✅
   3. If a player pockets the 8-ball before all of their target balls, they lose ✅
 
-## Development
+## Developing with nix flakes
+
+To activate flakes, include `experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` (create this file if it doesn't exist).
+
+Then, run `nix develop`. This will give you development environment with `elm`, so you can run:
 
 ```bash
 elm reactor
