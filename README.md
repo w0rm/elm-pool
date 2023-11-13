@@ -63,9 +63,9 @@ The game format is two (2) player 8-Ball. It is a simplified version of [WPA 8-B
 
 ## Developing with nix flakes
 
-To activate flakes, include `experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` (create this file if it doesn't exist).
+We are using the nix package manager, that can be installed following [these instructions](https://nixos.org/download.html). To activate the flakes feature, include `experimental-features = nix-command flakes` in `~/.config/nix/nix.conf` (create this file if it doesn't exist).
 
-Then, run `nix develop`. This will give you development environment with `elm`, so you can run:
+Then, run `nix develop` from the project root. This will give you development environment with `elm`, so you can run:
 
 ```bash
 elm reactor
