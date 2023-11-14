@@ -20,7 +20,7 @@ import Color exposing (Color)
 import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
-import Duration exposing (Duration, seconds)
+import Duration
 import EightBall exposing (AwaitingPlaceBallBehindHeadstring, AwaitingPlaceBallInHand, AwaitingPlayerShot, AwaitingStart, Player, Pool, ShotEvent, WhatHappened(..))
 import Force
 import Frame3d
@@ -88,7 +88,7 @@ type alias PlayingState =
     , cueElevation : Angle
     , hitElevation : Angle
     , hitRelativeAzimuth : Angle
-    , shootButton : Maybe Duration
+    , shootButton : Maybe Posix
     , mouse : PlayingMouse
     }
 
@@ -466,17 +466,17 @@ playingEntities world playingState camera3d cameraAzimuth =
 
 
 viewShootingStrength : Model -> Html Msg
-viewShootingStrength { state, dimensions } =
+viewShootingStrength { state, time, dimensions } =
     case state of
         Playing { shootButton } _ ->
             case shootButton of
                 Nothing ->
                     Html.text ""
 
-                Just duration ->
+                Just startTime ->
                     let
                         progressHeight =
-                            shootingStrength duration * (barHeight - 4)
+                            shootingStrength startTime time * (barHeight - 4)
 
                         height =
                             Tuple.second dimensions |> Pixels.inPixels
@@ -618,19 +618,6 @@ update msg model =
                     }
             in
             case newModel.state of
-                Playing playingState pool ->
-                    { newModel
-                        | state =
-                            Playing
-                                { playingState
-                                    | shootButton =
-                                        Maybe.map
-                                            (Quantity.plus (seconds (1 / 60)))
-                                            playingState.shootButton
-                                }
-                                pool
-                    }
-
                 Simulating events pool ->
                     if ballsStoppedMoving newModel.world then
                         case EightBall.playerShot (List.reverse events) pool of
@@ -894,9 +881,7 @@ update msg model =
                             Nothing ->
                                 let
                                     newPlayingState =
-                                        { playingState
-                                            | shootButton = Just (Duration.milliseconds 0)
-                                        }
+                                        { playingState | shootButton = Just model.time }
                                 in
                                 { model | state = Playing newPlayingState pool }
 
@@ -921,8 +906,8 @@ update msg model =
                     in
                     if canShoot axis model.world then
                         case playingState.shootButton of
-                            Just duration ->
-                                shoot axis duration pool model
+                            Just startTime ->
+                                shoot axis startTime pool model
 
                             Nothing ->
                                 model
@@ -952,8 +937,8 @@ placeBallBehindHeadstring position pool model =
     }
 
 
-shoot : Axis3d Meters WorldCoordinates -> Duration -> Pool AwaitingPlayerShot -> Model -> Model
-shoot axis duration pool model =
+shoot : Axis3d Meters WorldCoordinates -> Posix -> Pool AwaitingPlayerShot -> Model -> Model
+shoot axis startTime pool model =
     { model
         | state = Simulating [] pool
         , zoom = Animator.go Animator.verySlowly 1 model.zoom
@@ -973,7 +958,7 @@ shoot axis duration pool model =
                                      else
                                         Force.newtons 60
                                     )
-                                    (shootingStrength duration)
+                                    (shootingStrength startTime model.time)
                         in
                         Body.applyImpulse
                             (Quantity.times (Duration.milliseconds 16) force)
@@ -990,9 +975,13 @@ shoot axis duration pool model =
 
 {-| Returns a value from 0 to 1
 -}
-shootingStrength : Duration -> Float
-shootingStrength duration =
-    -(cos (Duration.inSeconds duration / 2 * pi) / 2) + 0.5
+shootingStrength : Posix -> Posix -> Float
+shootingStrength startTime endTime =
+    let
+        duration =
+            toFloat (Time.posixToMillis endTime - Time.posixToMillis startTime)
+    in
+    -(cos (duration / 2000 * pi) / 2) + 0.5
 
 
 canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
@@ -1013,7 +1002,7 @@ canSpawnHere mouseRay area world =
                     Just point2 ->
                         let
                             position =
-                                Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point2
+                                Point3d.translateIn Direction3d.z (Length.millimeters (57.15 / 2)) point2
 
                             canSpawn =
                                 List.all
@@ -1035,7 +1024,7 @@ canSpawnHere mouseRay area world =
                             CannotSpawn position
 
                     Nothing ->
-                        CannotSpawn (Point3d.translateBy (Vector3d.millimeters 0 0 (57.15 / 2)) point1)
+                        CannotSpawn (Point3d.translateIn Direction3d.z (Length.millimeters (57.15 / 2)) point1)
 
             Nothing ->
                 HoveringOuside
@@ -1105,7 +1094,7 @@ simulateWithEvents frame time world events =
 
             simulatedWorld =
                 -- Simulate at shorter interval to prevent tunneling
-                World.simulate (seconds (1 / 120)) world
+                World.simulate (Duration.seconds (1 / 120)) world
 
             contacts =
                 World.contacts simulatedWorld
