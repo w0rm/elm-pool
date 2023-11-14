@@ -258,7 +258,7 @@ update msg model =
 
         ( RunningMsg runningMsg, Running assetsPath runningModel ) ->
             let
-                ( newGameModel, _ ) =
+                newGameModel =
                     Game.update runningMsg runningModel
             in
             Running assetsPath newGameModel

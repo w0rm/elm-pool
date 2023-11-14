@@ -1,20 +1,12 @@
 module Game exposing
-    ( Camera
-    , CueData
-    , Effect(..)
-    , Model
+    ( Model
     , Msg(..)
     , State(..)
     , currentPlayer
     , currentTarget
     , initial
     , subscriptions
-    , subscriptionsSimulating
     , update
-    , updateCueMove
-    , updatePlacedBallBehindHeadstring
-    , updatePlacedBallInHand
-    , updateShoot
     , view
     )
 
@@ -74,29 +66,25 @@ type alias Model =
     , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
     , state : State
     , time : Posix
-    , cameraTimeline : Timeline Camera
-    , focalPointTimeline : Timeline (Point3d Meters WorldCoordinates)
-    }
 
-
-type alias Camera =
-    { zoom : Float -- 0 to 1
-    , azimuth : Angle
-    , elevation : Angle
+    -- Animated camera properties:
+    , zoom : Timeline Float
+    , azimuth : Timeline Angle
+    , elevation : Timeline Angle
+    , focalPoint : Timeline (Point3d Meters WorldCoordinates)
     }
 
 
 type State
-    = PlacingBehindHeadString (PlacingBallState AwaitingPlaceBallBehindHeadstring)
-    | Playing PlayingState
-    | Simulating SimulatingState
-    | PlacingBallInHand (PlacingBallState AwaitingPlaceBallInHand)
-    | GameOver (EightBall.Pool AwaitingStart) Player
+    = PlacingBehindHeadString PlacingBallMouse (Pool AwaitingPlaceBallBehindHeadstring)
+    | Playing PlayingState (Pool AwaitingPlayerShot)
+    | Simulating (List ( Time.Posix, ShotEvent )) (Pool AwaitingPlayerShot)
+    | PlacingBallInHand PlacingBallMouse (Pool AwaitingPlaceBallInHand)
+    | GameOver Player (Pool AwaitingStart)
 
 
 type alias PlayingState =
-    { pool : Pool AwaitingPlayerShot
-    , cueBallPosition : Point3d Meters WorldCoordinates
+    { cueBallPosition : Point3d Meters WorldCoordinates
     , cueElevation : Angle
     , hitElevation : Angle
     , hitRelativeAzimuth : Angle
@@ -108,25 +96,17 @@ type alias PlayingState =
 type PlayingMouse
     = HoveringCueBall -- TODO: use to render the clickable area
     | SettingCueElevation (Point2d Pixels ScreenCoordinates)
-    | NothingMeaningful
+    | OutsideOfCueBall
 
 
-initialPlayingState : Point3d Meters WorldCoordinates -> Pool AwaitingPlayerShot -> State
-initialPlayingState cueBallPosition pool =
-    Playing
-        { pool = pool
-        , cueBallPosition = cueBallPosition
-        , cueElevation = Angle.degrees 5
-        , hitRelativeAzimuth = Angle.degrees 0
-        , hitElevation = Angle.degrees 0
-        , mouse = NothingMeaningful
-        , shootButton = Nothing
-        }
-
-
-type alias PlacingBallState awaitingWhat =
-    { pool : Pool awaitingWhat
-    , mouse : PlacingBallMouse
+initialPlayingState : Point3d Meters WorldCoordinates -> PlayingState
+initialPlayingState cueBallPosition =
+    { cueBallPosition = cueBallPosition
+    , cueElevation = Angle.degrees 5
+    , hitRelativeAzimuth = Angle.degrees 0
+    , hitElevation = Angle.degrees 0
+    , mouse = OutsideOfCueBall
+    , shootButton = Nothing
     }
 
 
@@ -136,41 +116,13 @@ type PlacingBallMouse
     | HoveringOuside
 
 
-initialPlacingBallState : (PlacingBallState awaitingWhat -> State) -> Pool awaitingWhat -> State
-initialPlacingBallState fn pool =
-    fn
-        { pool = pool
-        , mouse = HoveringOuside
-        }
-
-
-type alias SimulatingState =
-    { events : List ( Time.Posix, ShotEvent )
-    , pool : Pool AwaitingPlayerShot
-    }
-
-
-initialSimulatingState : Pool AwaitingPlayerShot -> State
-initialSimulatingState pool =
-    Simulating
-        { pool = pool
-        , events = []
-        }
-
-
 type Msg
     = Tick Time.Posix
     | Resize Int Int
     | MouseWheel Float
-    | MouseDown
-        { x : Float
-        , y : Float
-        }
+    | MouseDown (Point2d Pixels ScreenCoordinates)
     | MouseUp
-    | MouseMove
-        { x : Float
-        , y : Float
-        }
+    | MouseMove (Point2d Pixels ScreenCoordinates)
     | ShootButtonDown
     | ShootButtonUp
 
@@ -187,85 +139,51 @@ initial ballTextures roughnessTexture ( width, height ) =
     , roughnessTexture = roughnessTexture
     , time = time
     , dimensions = ( Pixels.float width, Pixels.float height )
-    , cameraTimeline = Animator.init initialCamera
-    , focalPointTimeline = Animator.init Point3d.origin
+    , zoom = Animator.init 0.9
+    , azimuth = Animator.init (Angle.degrees -25)
+    , elevation = Animator.init (Angle.degrees 30)
+    , focalPoint = Animator.init Point3d.origin
     , orbiting = Nothing
-    , state = initialPlacingBallState PlacingBehindHeadString (EightBall.rack time EightBall.start)
+    , state = PlacingBehindHeadString HoveringOuside (EightBall.rack time EightBall.start)
     }
 
 
-initialCamera : Camera
-initialCamera =
-    { zoom = 0.9
-    , azimuth = Angle.degrees -25
-    , elevation = Angle.degrees 30
-    }
-
-
-currentCamera : Timeline Camera -> Camera
-currentCamera cameraTimeline =
-    { azimuth =
-        Angle.radians <|
-            Animator.linear cameraTimeline
-                (.azimuth >> Angle.inRadians >> Animator.at)
-    , elevation =
-        Angle.radians <|
-            Animator.linear cameraTimeline
-                (.elevation >> Angle.inRadians >> Animator.at)
-    , zoom = Animator.linear cameraTimeline (.zoom >> Animator.at)
-    }
-
-
-currentFocalPoint : Timeline (Point3d Meters WorldCoordinates) -> Point3d Meters WorldCoordinates
-currentFocalPoint focalPoint =
-    Point3d.fromMeters
-        (Animator.xyz focalPoint
-            (\point ->
-                let
-                    { x, y, z } =
-                        Point3d.toMeters point
-                in
-                { x = Animator.at x
-                , y = Animator.at y
-                , z = Animator.at z
-                }
-            )
-        )
-
-
-camera : Camera -> Point3d Meters WorldCoordinates -> Camera3d Meters WorldCoordinates
-camera { azimuth, elevation, zoom } focalPoint =
+camera : Model -> Camera3d Meters WorldCoordinates
+camera { azimuth, elevation, zoom, focalPoint } =
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.orbit
-                { focalPoint = focalPoint
+                { focalPoint =
+                    Point3d.meters
+                        (Animator.linear focalPoint (Point3d.xCoordinate >> Length.inMeters >> Animator.at))
+                        (Animator.linear focalPoint (Point3d.yCoordinate >> Length.inMeters >> Animator.at))
+                        (Animator.linear focalPoint (Point3d.zCoordinate >> Length.inMeters >> Animator.at))
                 , groundPlane = SketchPlane3d.xy
-                , azimuth = azimuth
-                , elevation = elevation
-                , distance = Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5) zoom
+                , azimuth =
+                    Angle.radians (Animator.linear azimuth (Angle.inRadians >> Animator.at))
+                , elevation =
+                    Angle.radians (Animator.linear elevation (Angle.inRadians >> Animator.at))
+                , distance = Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5) (Animator.linear zoom Animator.at)
                 }
         , verticalFieldOfView = Angle.degrees 24
         }
 
 
 ray : Model -> Point2d Pixels ScreenCoordinates -> Axis3d Meters WorldCoordinates
-ray { dimensions, cameraTimeline, focalPointTimeline } =
+ray model =
     Camera3d.ray
-        (camera
-            (currentCamera cameraTimeline)
-            (currentFocalPoint focalPointTimeline)
-        )
+        (camera model)
         (Rectangle2d.with
             { x1 = pixels 0
-            , y1 = Tuple.second dimensions
-            , x2 = Tuple.first dimensions
+            , y1 = Tuple.second model.dimensions
+            , x2 = Tuple.first model.dimensions
             , y2 = pixels 0
             }
         )
 
 
 view : Model -> Html Msg
-view ({ world, ballTextures, roughnessTexture, dimensions, cameraTimeline, focalPointTimeline } as model) =
+view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
     let
         dimensionsInt =
             Tuple.mapBoth Quantity.round Quantity.round dimensions
@@ -285,15 +203,12 @@ view ({ world, ballTextures, roughnessTexture, dimensions, cameraTimeline, focal
                 , intensityBelow = Illuminance.lux 0
                 }
 
-        cameraSettings =
-            currentCamera cameraTimeline
-
         camera3d =
-            camera cameraSettings (currentFocalPoint focalPointTimeline)
+            camera model
 
         bodies =
             case model.state of
-                PlacingBehindHeadString _ ->
+                PlacingBehindHeadString _ _ ->
                     World.bodies world
                         |> List.filter
                             (\b ->
@@ -310,35 +225,39 @@ view ({ world, ballTextures, roughnessTexture, dimensions, cameraTimeline, focal
 
         entitiesWithUI =
             case model.state of
-                PlacingBehindHeadString { mouse } ->
+                PlacingBehindHeadString mouse _ ->
                     placingBallEntities mouse Bodies.areaBehindTheHeadStringEntity :: entities
 
-                PlacingBallInHand { mouse } ->
+                PlacingBallInHand mouse _ ->
                     placingBallEntities mouse Scene3d.nothing :: entities
 
-                Playing playingState ->
-                    playingEntities world playingState camera3d cameraSettings.azimuth :: entities
+                Playing playingState _ ->
+                    let
+                        azimuth =
+                            Angle.radians (Animator.linear model.azimuth (Angle.inRadians >> Animator.at))
+                    in
+                    playingEntities world playingState camera3d azimuth :: entities
 
                 _ ->
                     entities
 
         cursor =
             case model.state of
-                PlacingBehindHeadString { mouse } ->
+                PlacingBehindHeadString mouse _ ->
                     if mouse == HoveringOuside then
                         "default"
 
                     else
                         "none"
 
-                PlacingBallInHand { mouse } ->
+                PlacingBallInHand mouse _ ->
                     if mouse == HoveringOuside then
                         "default"
 
                     else
                         "none"
 
-                Playing { mouse } ->
+                Playing { mouse } _ ->
                     case mouse of
                         HoveringCueBall ->
                             "pointer"
@@ -349,7 +268,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions, cameraTimeline, focal
                         _ ->
                             "default"
 
-                Simulating _ ->
+                Simulating _ _ ->
                     "wait"
 
                 _ ->
@@ -422,6 +341,9 @@ canShoot axis world =
 
         cueMaxDistance =
             Length.centimeters (2 + 150)
+
+        worldWithoutCueBall =
+            World.keepIf (\b -> Body.data b /= CueBall) world
     in
     List.all
         (\n ->
@@ -434,9 +356,6 @@ canShoot axis world =
 
                 cueRay =
                     Axis3d.through origin direction
-
-                worldWithoutCueBall =
-                    World.keepIf (\b -> Body.data b /= CueBall) world
             in
             case World.raycast cueRay worldWithoutCueBall of
                 Just { point, body } ->
@@ -549,7 +468,7 @@ playingEntities world playingState camera3d cameraAzimuth =
 viewShootingStrength : Model -> Html Msg
 viewShootingStrength { state, dimensions } =
     case state of
-        Playing { shootButton } ->
+        Playing { shootButton } _ ->
             case shootButton of
                 Nothing ->
                     Html.text ""
@@ -598,19 +517,19 @@ viewShootingStrength { state, dimensions } =
 currentPlayer : Model -> Player
 currentPlayer model =
     case model.state of
-        PlacingBehindHeadString { pool } ->
+        PlacingBehindHeadString _ pool ->
             EightBall.currentPlayer pool
 
-        Playing { pool } ->
+        Playing _ pool ->
             EightBall.currentPlayer pool
 
-        Simulating { pool } ->
+        Simulating _ pool ->
             EightBall.currentPlayer pool
 
-        PlacingBallInHand { pool } ->
+        PlacingBallInHand _ pool ->
             EightBall.currentPlayer pool
 
-        GameOver _ winner ->
+        GameOver winner _ ->
             winner
 
 
@@ -620,19 +539,19 @@ currentTarget state =
         currentTarget_ : EightBall.CurrentTarget
         currentTarget_ =
             case state of
-                PlacingBehindHeadString { pool } ->
+                PlacingBehindHeadString _ pool ->
                     EightBall.currentTarget pool
 
-                Playing { pool } ->
+                Playing _ pool ->
                     EightBall.currentTarget pool
 
-                Simulating { pool } ->
+                Simulating _ pool ->
                     EightBall.currentTarget pool
 
-                PlacingBallInHand { pool } ->
+                PlacingBallInHand _ pool ->
                     EightBall.currentTarget pool
 
-                GameOver pool _ ->
+                GameOver _ pool ->
                     EightBall.currentTarget pool
     in
     case currentTarget_ of
@@ -662,14 +581,6 @@ subscriptions _ =
         ]
 
 
-subscriptionsSimulating : Model -> Sub Msg
-subscriptionsSimulating _ =
-    Sub.batch
-        [ Browser.Events.onResize Resize
-        , Browser.Events.onAnimationFrame Tick
-        ]
-
-
 ballsStoppedMoving : World Id -> Bool
 ballsStoppedMoving world =
     List.all
@@ -691,36 +602,24 @@ ballsStoppedMoving world =
         (World.bodies world)
 
 
-type Effect
-    = NoEffect
-    | SetBallInHandPlace (Point3d Meters WorldCoordinates)
-    | SetBehindHeadStringPlace (Point3d Meters WorldCoordinates)
-    | Shoot (Axis3d Meters WorldCoordinates) Duration Camera
-    | CueMove (Maybe CueData) Camera
-
-
-type alias CueData =
-    { cueElevation : Angle
-    , hitElevation : Angle
-    , hitRelativeAzimuth : Angle
-    }
-
-
-update : Msg -> Model -> ( Model, Effect )
+update : Msg -> Model -> Model
 update msg model =
     case msg of
         Tick time ->
             let
+                -- advance the timelines
                 newModel =
                     { model
                         | time = time
-                        , cameraTimeline = Animator.updateTimeline time model.cameraTimeline
-                        , focalPointTimeline = Animator.updateTimeline time model.focalPointTimeline
+                        , azimuth = Animator.updateTimeline time model.azimuth
+                        , elevation = Animator.updateTimeline time model.elevation
+                        , zoom = Animator.updateTimeline time model.zoom
+                        , focalPoint = Animator.updateTimeline time model.focalPoint
                     }
             in
             case newModel.state of
-                Playing playingState ->
-                    ( { newModel
+                Playing playingState pool ->
+                    { newModel
                         | state =
                             Playing
                                 { playingState
@@ -729,37 +628,25 @@ update msg model =
                                             (Quantity.plus (seconds (1 / 60)))
                                             playingState.shootButton
                                 }
-                      }
-                    , NoEffect
-                    )
+                                pool
+                    }
 
-                Simulating simulatingState ->
+                Simulating events pool ->
                     if ballsStoppedMoving newModel.world then
-                        -- TODO: Possibly add effect that indicates simulation has completed.
-                        case EightBall.playerShot (List.reverse simulatingState.events) simulatingState.pool of
+                        case EightBall.playerShot (List.reverse events) pool of
                             IllegalBreak newPool ->
-                                ( { newModel
+                                { newModel
                                     | world = Bodies.world -- Reset the table.
-                                    , state = initialPlacingBallState PlacingBehindHeadString (EightBall.rack time newPool)
-                                    , focalPointTimeline =
-                                        Animator.go Animator.quickly
-                                            Point3d.origin
-                                            newModel.focalPointTimeline
-                                  }
-                                , NoEffect
-                                )
+                                    , state = PlacingBehindHeadString HoveringOuside (EightBall.rack time newPool)
+                                    , focalPoint = Animator.go Animator.quickly Point3d.origin newModel.focalPoint
+                                }
 
                             PlayersFault newPool ->
-                                ( { newModel
-                                    | state = initialPlacingBallState PlacingBallInHand newPool
+                                { newModel
+                                    | state = PlacingBallInHand HoveringOuside newPool
                                     , world = World.keepIf (\b -> Body.data b /= CueBall) newModel.world
-                                    , focalPointTimeline =
-                                        Animator.go Animator.quickly
-                                            Point3d.origin
-                                            newModel.focalPointTimeline
-                                  }
-                                , NoEffect
-                                )
+                                    , focalPoint = Animator.go Animator.quickly Point3d.origin newModel.focalPoint
+                                }
 
                             NextShot newPool ->
                                 let
@@ -770,105 +657,66 @@ update msg model =
                                             |> Maybe.map (\b -> Frame3d.originPoint (Body.frame b))
                                             |> Maybe.withDefault Point3d.origin
                                 in
-                                ( { newModel
-                                    | state = initialPlayingState cuePosition newPool
-                                    , focalPointTimeline =
-                                        Animator.go Animator.quickly
-                                            cuePosition
-                                            newModel.focalPointTimeline
-                                  }
-                                , NoEffect
-                                )
+                                { newModel
+                                    | state = Playing (initialPlayingState cuePosition) newPool
+                                    , focalPoint = Animator.go Animator.quickly cuePosition newModel.focalPoint
+                                }
 
                             EightBall.GameOver newPool { winner } ->
-                                ( { newModel
-                                    | state = GameOver newPool winner
-                                    , focalPointTimeline =
-                                        Animator.go Animator.quickly
-                                            Point3d.origin
-                                            newModel.focalPointTimeline
-                                  }
-                                , NoEffect
-                                )
+                                { newModel
+                                    | state = GameOver winner newPool
+                                    , focalPoint = Animator.go Animator.quickly Point3d.origin newModel.focalPoint
+                                }
 
                     else
                         let
                             ( newWorld, newEvents ) =
-                                simulateWithEvents 2 time newModel.world simulatingState.events
-
-                            newSimulatingState =
-                                { simulatingState | events = newEvents }
+                                simulateWithEvents 2 time newModel.world events
                         in
-                        ( { newModel
-                            | state = Simulating newSimulatingState
+                        { newModel
+                            | state = Simulating newEvents pool
                             , world = newWorld
-                          }
-                        , NoEffect
-                        )
+                        }
 
                 _ ->
-                    ( newModel
-                    , NoEffect
-                    )
+                    newModel
 
         Resize width height ->
-            ( { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
-            , NoEffect
-            )
+            { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
 
         MouseWheel deltaY ->
             let
-                cameraSettings =
-                    currentCamera model.cameraTimeline
-
                 newZoom =
-                    clamp 0 1 (cameraSettings.zoom - deltaY * 0.002)
+                    clamp 0 1 (Animator.linear model.zoom Animator.at - deltaY * 0.002)
             in
-            ( { model
-                | cameraTimeline =
-                    Animator.interrupt
-                        [ Animator.event Animator.immediately
-                            { cameraSettings | zoom = newZoom }
-                        ]
-                        model.cameraTimeline
-              }
-            , NoEffect
-            )
+            { model | zoom = Animator.go Animator.immediately newZoom model.zoom }
 
-        MouseDown mousePixels ->
-            let
-                mouse =
-                    Point2d.fromPixels mousePixels
-            in
+        MouseDown mousePosition ->
             case model.state of
-                PlacingBallInHand _ ->
-                    case canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world of
+                PlacingBallInHand _ pool ->
+                    case canSpawnHere (ray model mousePosition) Bodies.areaBallInHand model.world of
                         CanSpawnAt position ->
-                            updatePlacedBallInHand position model
+                            placeBallInHand position pool model
 
                         CannotSpawn _ ->
-                            ( model, NoEffect )
+                            model
 
                         HoveringOuside ->
-                            ( { model | orbiting = Just mouse }
-                            , NoEffect
-                            )
+                            { model | orbiting = Just mousePosition }
 
-                PlacingBehindHeadString _ ->
-                    case canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world of
+                PlacingBehindHeadString _ pool ->
+                    case canSpawnHere (ray model mousePosition) Bodies.areaBehindTheHeadString model.world of
                         CanSpawnAt position ->
-                            updatePlacedBallBehindHeadstring position model
+                            placeBallBehindHeadstring position pool model
 
                         CannotSpawn _ ->
-                            ( model, NoEffect )
+                            model
 
                         HoveringOuside ->
-                            ( { model | orbiting = Just mouse }
-                            , NoEffect
-                            )
+                            { model | orbiting = Just mousePosition }
 
-                Playing playingState ->
-                    case World.raycast (ray model mouse) model.world of
+                Playing playingState pool ->
+                    case World.raycast (ray model mousePosition) model.world of
                         Just raycastResult ->
                             case Body.data raycastResult.body of
                                 CueBall ->
@@ -885,11 +733,11 @@ update msg model =
                                         hitElevation =
                                             Direction3d.elevationFrom SketchPlane3d.xy normal
 
-                                        cameraSettings =
-                                            currentCamera model.cameraTimeline
+                                        azimuth =
+                                            Angle.radians (Animator.linear model.azimuth (Angle.inRadians >> Animator.at))
 
                                         hitRelativeAzimuth =
-                                            Quantity.minus cameraSettings.azimuth hitAzimuth
+                                            Quantity.minus azimuth hitAzimuth
                                                 |> Angle.normalize
 
                                         hitRelativeAzimuthDegrees =
@@ -897,62 +745,50 @@ update msg model =
                                     in
                                     -- Can only click on the visible hemisphere
                                     if abs hitRelativeAzimuthDegrees < 90 then
-                                        ( { model
+                                        { model
                                             | state =
                                                 Playing
                                                     { playingState
-                                                        | mouse = SettingCueElevation mouse
+                                                        | mouse = SettingCueElevation mousePosition
                                                         , hitElevation = hitElevation
                                                         , hitRelativeAzimuth = hitRelativeAzimuth
                                                     }
-                                          }
-                                        , NoEffect
-                                        )
+                                                    pool
+                                        }
 
                                     else
-                                        ( { model | orbiting = Just mouse }
-                                        , NoEffect
-                                        )
+                                        { model | orbiting = Just mousePosition }
 
                                 _ ->
-                                    ( { model | orbiting = Just mouse }
-                                    , NoEffect
-                                    )
+                                    { model | orbiting = Just mousePosition }
 
                         Nothing ->
-                            ( { model | orbiting = Just mouse }
-                            , NoEffect
-                            )
+                            { model | orbiting = Just mousePosition }
 
-                Simulating _ ->
-                    ( { model | orbiting = Just mouse }
-                    , NoEffect
-                    )
+                Simulating _ _ ->
+                    { model | orbiting = Just mousePosition }
 
                 GameOver _ _ ->
-                    ( { model | orbiting = Just mouse }
-                    , NoEffect
-                    )
+                    { model | orbiting = Just mousePosition }
 
-        MouseMove mousePixels ->
-            let
-                mouse =
-                    Point2d.fromPixels mousePixels
-            in
+        MouseMove mousePosition ->
             case model.orbiting of
-                Just from ->
+                Just originalPosition ->
                     let
                         { x, y } =
-                            mouse
-                                |> Vector2d.from from
+                            mousePosition
+                                |> Vector2d.from originalPosition
                                 |> Vector2d.toPixels
 
-                        cameraSettings =
-                            currentCamera model.cameraTimeline
+                        azimuth =
+                            Angle.radians (Animator.linear model.azimuth (Angle.inRadians >> Animator.at))
+
+                        elevation =
+                            Angle.radians (Animator.linear model.elevation (Angle.inRadians >> Animator.at))
 
                         -- 0.2 to 1
                         orbitingPrecision =
-                            0.2 + cameraSettings.zoom / 0.8
+                            0.2 + Animator.linear model.zoom Animator.at / 0.8
 
                         deltaAzimuth =
                             x * orbitingPrecision
@@ -960,137 +796,96 @@ update msg model =
                         deltaElevation =
                             y * orbitingPrecision
 
-                        newCamera =
-                            { cameraSettings
-                                | azimuth =
-                                    cameraSettings.azimuth
-                                        |> Quantity.minus (Angle.degrees deltaAzimuth)
-                                        |> Angle.normalize
-                                , elevation =
-                                    cameraSettings.elevation
-                                        |> Quantity.plus (Angle.degrees deltaElevation)
-                                        |> Quantity.clamp
-                                            (Angle.degrees 6)
-                                            (Angle.degrees 90)
-                            }
+                        newAzimuth =
+                            azimuth
+                                |> Quantity.minus (Angle.degrees deltaAzimuth)
+                                |> Angle.normalize
+
+                        newElevation =
+                            elevation
+                                |> Quantity.plus (Angle.degrees deltaElevation)
+                                |> Quantity.clamp (Angle.degrees 6) (Angle.degrees 90)
                     in
-                    ( { model
-                        | orbiting = Just mouse
-                        , cameraTimeline =
-                            Animator.interrupt
-                                [ Animator.event Animator.immediately
-                                    newCamera
-                                ]
-                                model.cameraTimeline
-                      }
-                    , NoEffect
-                    )
+                    { model
+                        | orbiting = Just mousePosition
+                        , azimuth = Animator.go Animator.immediately newAzimuth model.azimuth
+                        , elevation = Animator.go Animator.immediately newElevation model.elevation
+                    }
 
                 Nothing ->
                     case model.state of
-                        PlacingBallInHand { pool } ->
+                        PlacingBallInHand _ pool ->
                             let
-                                newPlacingState =
-                                    { pool = pool
-                                    , mouse = canSpawnHere (ray model mouse) Bodies.areaBallInHand model.world
-                                    }
+                                newMouse =
+                                    canSpawnHere (ray model mousePosition) Bodies.areaBallInHand model.world
                             in
-                            ( { model | state = PlacingBallInHand newPlacingState }
-                            , NoEffect
-                            )
+                            { model | state = PlacingBallInHand newMouse pool }
 
-                        PlacingBehindHeadString { pool } ->
+                        PlacingBehindHeadString _ pool ->
                             let
-                                newPlacingState =
-                                    { pool = pool
-                                    , mouse = canSpawnHere (ray model mouse) Bodies.areaBehindTheHeadString model.world
-                                    }
+                                newMouse =
+                                    canSpawnHere (ray model mousePosition) Bodies.areaBehindTheHeadString model.world
                             in
-                            ( { model | state = PlacingBehindHeadString newPlacingState }
-                            , NoEffect
-                            )
+                            { model | state = PlacingBehindHeadString newMouse pool }
 
-                        Playing playingState ->
+                        Playing playingState pool ->
                             case playingState.mouse of
-                                SettingCueElevation point ->
+                                SettingCueElevation originalPosition ->
                                     let
                                         { y } =
-                                            Vector2d.toPixels (Vector2d.from point mouse)
-
-                                        { zoom } =
-                                            currentCamera model.cameraTimeline
+                                            Vector2d.toPixels (Vector2d.from originalPosition mousePosition)
 
                                         precision =
-                                            0.2 + zoom / 0.8
+                                            0.2 + Animator.linear model.zoom Animator.at / 0.8
 
                                         newPlayingState =
                                             { playingState
-                                                | mouse = SettingCueElevation mouse
+                                                | mouse = SettingCueElevation mousePosition
                                                 , cueElevation =
                                                     playingState.cueElevation
                                                         |> Quantity.minus (Angle.degrees (y * precision))
                                                         |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
                                             }
                                     in
-                                    ( { model | state = Playing newPlayingState }
-                                    , NoEffect
-                                    )
+                                    { model | state = Playing newPlayingState pool }
 
                                 _ ->
-                                    case World.raycast (ray model mouse) model.world of
+                                    case World.raycast (ray model mousePosition) model.world of
                                         Just raycastResult ->
                                             case Body.data raycastResult.body of
                                                 CueBall ->
-                                                    ( { model | state = Playing { playingState | mouse = HoveringCueBall } }
-                                                    , NoEffect
-                                                    )
+                                                    { model | state = Playing { playingState | mouse = HoveringCueBall } pool }
 
                                                 _ ->
-                                                    ( { model | state = Playing { playingState | mouse = NothingMeaningful } }
-                                                    , NoEffect
-                                                    )
+                                                    { model | state = Playing { playingState | mouse = OutsideOfCueBall } pool }
 
                                         Nothing ->
-                                            ( { model | state = Playing { playingState | mouse = NothingMeaningful } }
-                                            , NoEffect
-                                            )
+                                            { model | state = Playing { playingState | mouse = OutsideOfCueBall } pool }
 
                         _ ->
-                            ( model, NoEffect )
+                            model
 
         MouseUp ->
             case model.state of
-                Playing playingState ->
+                Playing playingState pool ->
                     let
                         newPlayingState =
-                            { playingState | mouse = NothingMeaningful }
+                            { playingState | mouse = OutsideOfCueBall }
                     in
-                    ( { model
-                        | state = Playing newPlayingState
+                    { model
+                        | state = Playing newPlayingState pool
                         , orbiting = Nothing
-                      }
-                    , CueMove
-                        (Just
-                            { cueElevation = playingState.cueElevation
-                            , hitElevation = playingState.hitElevation
-                            , hitRelativeAzimuth = playingState.hitRelativeAzimuth
-                            }
-                        )
-                        (Animator.current model.cameraTimeline)
-                    )
+                    }
 
                 _ ->
-                    ( { model | orbiting = Nothing }
-                    , CueMove Nothing
-                        (Animator.current model.cameraTimeline)
-                    )
+                    { model | orbiting = Nothing }
 
         ShootButtonDown ->
             case model.state of
-                Playing playingState ->
+                Playing playingState pool ->
                     let
-                        { azimuth } =
-                            currentCamera model.cameraTimeline
+                        azimuth =
+                            Angle.radians (Animator.linear model.azimuth (Angle.inRadians >> Animator.at))
                     in
                     if canShoot (cueAxis playingState azimuth) model.world then
                         -- ShootButtonDown can be sent many times
@@ -1100,178 +895,104 @@ update msg model =
                                 let
                                     newPlayingState =
                                         { playingState
-                                            | shootButton =
-                                                Just (Duration.milliseconds 0)
+                                            | shootButton = Just (Duration.milliseconds 0)
                                         }
                                 in
-                                ( { model | state = Playing newPlayingState }
-                                , NoEffect
-                                )
+                                { model | state = Playing newPlayingState pool }
 
                             _ ->
-                                ( model, NoEffect )
+                                model
 
                     else
-                        ( model, NoEffect )
+                        model
 
                 _ ->
-                    ( model, NoEffect )
+                    model
 
         ShootButtonUp ->
             case model.state of
-                Playing playingState ->
+                Playing playingState pool ->
                     let
-                        cameraSettings =
-                            currentCamera model.cameraTimeline
+                        azimuth =
+                            Angle.radians (Animator.linear model.azimuth (Angle.inRadians >> Animator.at))
 
                         axis =
-                            cueAxis playingState cameraSettings.azimuth
+                            cueAxis playingState azimuth
                     in
                     if canShoot axis model.world then
                         case playingState.shootButton of
                             Just duration ->
-                                updateShoot axis duration cameraSettings model
+                                shoot axis duration pool model
 
                             Nothing ->
-                                ( model, NoEffect )
+                                model
 
                     else
-                        ( { model | state = Playing { playingState | shootButton = Nothing } }
-                        , NoEffect
-                        )
+                        { model | state = Playing { playingState | shootButton = Nothing } pool }
 
                 _ ->
-                    ( model, NoEffect )
+                    model
 
 
-updatePlacedBallInHand : Point3d Meters WorldCoordinates -> Model -> ( Model, Effect )
-updatePlacedBallInHand position model =
-    case model.state of
-        PlacingBallInHand { pool } ->
-            ( { model
-                | state = initialPlayingState position (EightBall.placeBallInHand model.time pool)
-                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
-                , focalPointTimeline =
-                    Animator.go Animator.quickly
-                        position
-                        model.focalPointTimeline
-              }
-            , SetBallInHandPlace position
-            )
-
-        _ ->
-            ( model, NoEffect )
+placeBallInHand : Point3d Meters WorldCoordinates -> Pool AwaitingPlaceBallInHand -> Model -> Model
+placeBallInHand position pool model =
+    { model
+        | state = Playing (initialPlayingState position) (EightBall.placeBallInHand model.time pool)
+        , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+        , focalPoint = Animator.go Animator.quickly position model.focalPoint
+    }
 
 
-updatePlacedBallBehindHeadstring : Point3d Meters WorldCoordinates -> Model -> ( Model, Effect )
-updatePlacedBallBehindHeadstring position model =
-    case model.state of
-        PlacingBehindHeadString { pool } ->
-            ( { model
-                | state = initialPlayingState position (EightBall.placeBallBehindHeadstring model.time pool)
-                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
-                , focalPointTimeline =
-                    Animator.go Animator.quickly
-                        position
-                        model.focalPointTimeline
-              }
-            , SetBehindHeadStringPlace position
-            )
-
-        _ ->
-            ( model, NoEffect )
+placeBallBehindHeadstring : Point3d Meters WorldCoordinates -> Pool AwaitingPlaceBallBehindHeadstring -> Model -> Model
+placeBallBehindHeadstring position pool model =
+    { model
+        | state = Playing (initialPlayingState position) (EightBall.placeBallBehindHeadstring model.time pool)
+        , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+        , focalPoint = Animator.go Animator.quickly position model.focalPoint
+    }
 
 
-updateShoot : Axis3d Meters WorldCoordinates -> Duration -> Camera -> Model -> ( Model, Effect )
-updateShoot axis duration newCamera model =
-    case model.state of
-        Playing playingState ->
-            ( { model
-                | state = initialSimulatingState playingState.pool
-                , cameraTimeline =
-                    model.cameraTimeline
-                        |> Animator.interrupt
-                            [ Animator.event Animator.immediately
-                                newCamera
-                            ]
-                        |> Animator.go Animator.verySlowly
-                            { newCamera
-                                | zoom = 1
-                                , elevation = Angle.degrees 50
-                            }
-                , world =
-                    World.update
-                        (\b ->
-                            if Body.data b == CueBall then
-                                let
-                                    force =
-                                        Quantity.interpolateFrom
-                                            (Force.newtons 10)
-                                            (if EightBall.isBreak playingState.pool then
-                                                -- Make break a bit stronger
-                                                Force.newtons 100
+shoot : Axis3d Meters WorldCoordinates -> Duration -> Pool AwaitingPlayerShot -> Model -> Model
+shoot axis duration pool model =
+    { model
+        | state = Simulating [] pool
+        , zoom = Animator.go Animator.verySlowly 1 model.zoom
+        , elevation = Animator.go Animator.verySlowly (Angle.degrees 50) model.elevation
+        , world =
+            World.update
+                (\b ->
+                    if Body.data b == CueBall then
+                        let
+                            force =
+                                Quantity.interpolateFrom
+                                    (Force.newtons 10)
+                                    (if EightBall.isBreak pool then
+                                        -- Make break a bit stronger
+                                        Force.newtons 100
 
-                                             else
-                                                Force.newtons 60
-                                            )
-                                            (shootingStrength duration)
-                                in
-                                Body.applyImpulse
-                                    (Quantity.times (Duration.milliseconds 16) force)
-                                    (Axis3d.reverse axis |> Axis3d.direction)
-                                    (Axis3d.originPoint axis)
-                                    b
+                                     else
+                                        Force.newtons 60
+                                    )
+                                    (shootingStrength duration)
+                        in
+                        Body.applyImpulse
+                            (Quantity.times (Duration.milliseconds 16) force)
+                            (Axis3d.reverse axis |> Axis3d.direction)
+                            (Axis3d.originPoint axis)
+                            b
 
-                            else
-                                b
-                        )
-                        model.world
-              }
-            , Shoot axis duration newCamera
-            )
-
-        _ ->
-            ( model, NoEffect )
+                    else
+                        b
+                )
+                model.world
+    }
 
 
-updateCueMove : Maybe CueData -> Camera -> Model -> ( Model, Effect )
-updateCueMove maybeCueData newCamera model =
-    let
-        newCameraTimeline =
-            Animator.go (Animator.millis 200)
-                newCamera
-                model.cameraTimeline
-    in
-    case ( model.state, maybeCueData ) of
-        ( Playing playingState, Just { cueElevation, hitElevation, hitRelativeAzimuth } ) ->
-            ( { model
-                | state =
-                    Playing
-                        { playingState
-                            | cueElevation = cueElevation
-                            , hitElevation = hitElevation
-                            , hitRelativeAzimuth = hitRelativeAzimuth
-                        }
-                , cameraTimeline = newCameraTimeline
-              }
-            , NoEffect
-            )
-
-        _ ->
-            ( { model
-                | cameraTimeline = newCameraTimeline
-              }
-            , NoEffect
-            )
-
-
+{-| Returns a value from 0 to 1
+-}
 shootingStrength : Duration -> Float
 shootingStrength duration =
-    let
-        ms =
-            Duration.inMilliseconds duration
-    in
-    -(cos (ms / 2000 * pi) / 2) + 0.5
+    -(cos (Duration.inSeconds duration / 2 * pi) / 2) + 0.5
 
 
 canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
@@ -1288,7 +1009,7 @@ canSpawnHere mouseRay area world =
     if hitsTable then
         case Axis3d.intersectionWithPlane Plane3d.xy mouseRay of
             Just point1 ->
-                case intersectionWithRectangle mouseRay area of
+                case Axis3d.intersectionWithRectangle area mouseRay of
                     Just point2 ->
                         let
                             position =
@@ -1466,43 +1187,9 @@ simulateWithEvents frame time world events =
         ( world, events )
 
 
-intersectionWithRectangle : Axis3d units coordinates -> Rectangle3d units coordinates -> Maybe (Point3d units coordinates)
-intersectionWithRectangle axis rectangle =
-    let
-        plane =
-            Rectangle3d.axes rectangle
-    in
-    case Axis3d.intersectionWithPlane (SketchPlane3d.toPlane plane) axis of
-        (Just point) as result ->
-            let
-                ( width, height ) =
-                    Rectangle3d.dimensions rectangle
-
-                ( x, y ) =
-                    Point2d.coordinates (Point3d.projectInto plane point)
-            in
-            if
-                Quantity.lessThanOrEqualTo (Quantity.half width) (Quantity.abs x)
-                    && Quantity.lessThanOrEqualTo (Quantity.half height) (Quantity.abs y)
-            then
-                result
-
-            else
-                Nothing
-
-        Nothing ->
-            Nothing
-
-
-decodeMouse :
-    ({ x : Float
-     , y : Float
-     }
-     -> Msg
-    )
-    -> Json.Decode.Decoder Msg
+decodeMouse : (Point2d Pixels ScreenCoordinates -> Msg) -> Json.Decode.Decoder Msg
 decodeMouse msg =
-    Json.Decode.map2 (\x y -> msg { x = x, y = y })
+    Json.Decode.map2 (\x y -> msg (Point2d.pixels x y))
         (Json.Decode.field "pageX" Json.Decode.float)
         (Json.Decode.field "pageY" Json.Decode.float)
 

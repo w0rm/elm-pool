@@ -368,13 +368,13 @@ Use `rack` when in this state.
 
 -}
 type AwaitingRack
-    = AwaitingRack
+    = AwaitingRack Never
 
 
 {-| Ready for a player to take a shot.
 -}
 type AwaitingPlayerShot
-    = AwaitingPlayerShot
+    = AwaitingPlayerShot Never
 
 
 {-| When a player scratches, or otherwise fouls, during regular play, the next player is given ball-in-hand anywhere on the table.
@@ -383,7 +383,7 @@ See [WPA rules](https://wpapool.com/rules-of-play/) 1.5 Cue Ball in Hand for mor
 
 -}
 type AwaitingPlaceBallInHand
-    = AwaitingPlaceBallInHand
+    = AwaitingPlaceBallInHand Never
 
 
 {-| This is the area where the player can place the cue ball before a break.
@@ -397,13 +397,13 @@ Also known as "in the kitchen".
 
 -}
 type AwaitingPlaceBallBehindHeadstring
-    = AwaitingPlaceBallBehindHeadstring
+    = AwaitingPlaceBallBehindHeadstring Never
 
 
 {-| When the game is over, start a new game to play again.
 -}
 type AwaitingStart
-    = AwaitingStart
+    = AwaitingStart Never
 
 
 {-| The balls must be racked before the player can place the cue ball and break.

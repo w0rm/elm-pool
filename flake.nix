@@ -18,8 +18,8 @@
             elm-json
             nodePackages.uglify-js
             butler
-            ghostscript  # for generating ball textures
-            pngquant  # for minimizing ball textures
+            ghostscript # for generating ball textures
+            pngquant # for minimizing ball textures
           ];
         };
       });
