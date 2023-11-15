@@ -671,14 +671,20 @@ update msg model =
             case model.state of
                 PlacingBallInHand (CanSpawnAt position) pool ->
                     { model
-                        | state = Playing OutsideOfCueBall (initialPlayingState position) (EightBall.placeBallInHand model.time pool)
+                        | state =
+                            Playing OutsideOfCueBall
+                                (initialPlayingState position)
+                                (EightBall.placeBallInHand model.time pool)
                         , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                         , focalPoint = Animator.go Animator.quickly position model.focalPoint
                     }
 
                 PlacingBehindHeadString (CanSpawnAt position) pool ->
                     { model
-                        | state = Playing OutsideOfCueBall (initialPlayingState position) (EightBall.placeBallBehindHeadstring model.time pool)
+                        | state =
+                            Playing OutsideOfCueBall
+                                (initialPlayingState position)
+                                (EightBall.placeBallBehindHeadstring model.time pool)
                         , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                         , focalPoint = Animator.go Animator.quickly position model.focalPoint
                     }
@@ -803,40 +809,35 @@ hoverCueBall : Axis3d Meters WorldCoordinates -> World Id -> Timeline Angle -> P
 hoverCueBall mouseRay world azimuthTimeline =
     case World.raycast mouseRay world of
         Just { body, normal } ->
-            case Body.data body of
-                CueBall ->
-                    let
-                        frame =
-                            Body.frame body
+            let
+                frame =
+                    Body.frame body
 
-                        hitNormal =
-                            Direction3d.placeIn frame normal
+                hitNormal =
+                    Direction3d.placeIn frame normal
 
-                        hitAzimuth =
-                            Direction3d.azimuthIn SketchPlane3d.xy hitNormal
+                hitAzimuth =
+                    Direction3d.azimuthIn SketchPlane3d.xy hitNormal
 
-                        hitElevation =
-                            Direction3d.elevationFrom SketchPlane3d.xy hitNormal
+                hitElevation =
+                    Direction3d.elevationFrom SketchPlane3d.xy hitNormal
 
-                        azimuth =
-                            angleFromTimeline azimuthTimeline
+                azimuth =
+                    angleFromTimeline azimuthTimeline
 
-                        hitRelativeAzimuth =
-                            Quantity.minus azimuth hitAzimuth
-                                |> Angle.normalize
+                hitRelativeAzimuth =
+                    Quantity.minus azimuth hitAzimuth
+                        |> Angle.normalize
 
-                        hitRelativeAzimuthDegrees =
-                            Angle.inDegrees hitRelativeAzimuth
-                    in
-                    -- Can only click on the visible hemisphere
-                    if abs hitRelativeAzimuthDegrees < 90 then
-                        HoveringCueBall hitRelativeAzimuth hitElevation
+                hoveringFrontHemisphere =
+                    -- Prevent from hoveing the back hemisphere when looking from the top
+                    Quantity.lessThan (Angle.degrees 90) (Quantity.abs hitRelativeAzimuth)
+            in
+            if Body.data body == CueBall && hoveringFrontHemisphere then
+                HoveringCueBall hitRelativeAzimuth hitElevation
 
-                    else
-                        OutsideOfCueBall
-
-                _ ->
-                    OutsideOfCueBall
+            else
+                OutsideOfCueBall
 
         Nothing ->
             OutsideOfCueBall
@@ -886,12 +887,18 @@ setCueElevation originalPosition newPosition zoomTimeline playingState =
     }
 
 
+{-| Apply impulse to the cue ball depending on the shooting strength.
+The strength is calculated based on how long the spacebar has been pressed.
+-}
 shoot : Axis3d Meters WorldCoordinates -> Posix -> Posix -> Bool -> World Id -> World Id
-shoot axis startTime endTime isBreak world =
+shoot axis startTime endTime isBreak =
     World.update
-        (\b ->
-            if Body.data b == CueBall then
+        (\body ->
+            if Body.data body == CueBall then
                 let
+                    shootingAxis =
+                        Axis3d.reverse axis
+
                     force =
                         Quantity.interpolateFrom
                             (Force.newtons 10)
@@ -906,14 +913,13 @@ shoot axis startTime endTime isBreak world =
                 in
                 Body.applyImpulse
                     (Quantity.times (Duration.milliseconds 16) force)
-                    (Axis3d.reverse axis |> Axis3d.direction)
-                    (Axis3d.originPoint axis)
-                    b
+                    (Axis3d.direction shootingAxis)
+                    (Axis3d.originPoint shootingAxis)
+                    body
 
             else
-                b
+                body
         )
-        world
 
 
 {-| Returns a value from 0 to 1
