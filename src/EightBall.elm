@@ -636,12 +636,7 @@ playerBreak shotEvents data =
         numberOfBallsToWall =
             numberOfBallsHitWall shotEvents
     in
-    if
-        numberOfBallsToWall
-            < 4
-            && List.length allPocketedBalls
-            < 1
-    then
+    if (numberOfBallsToWall < 4) && (List.length allPocketedBalls < 1) then
         IllegalBreak <|
             Pool
                 { data
