@@ -204,22 +204,10 @@ view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
         camera3d =
             camera model
 
-        bodies =
-            case model.state of
-                PlacingBehindHeadString _ _ ->
-                    World.bodies world
-                        |> List.filter
-                            (\b ->
-                                Body.data b /= CueBall
-                            )
-
-                _ ->
-                    World.bodies world
-
         entities =
             List.map
                 (Bodies.bodyToEntity roughnessTexture ballTextures)
-                bodies
+                (World.bodies world)
 
         entitiesWithUI =
             case model.state of
@@ -241,6 +229,12 @@ view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
 
         cursor =
             case model.state of
+                PlacingBallInHand HoveringOuside _ ->
+                    "default"
+
+                PlacingBehindHeadString HoveringOuside _ ->
+                    "default"
+
                 PlacingBallInHand _ _ ->
                     "none"
 
