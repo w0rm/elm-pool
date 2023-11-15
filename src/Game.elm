@@ -127,8 +127,8 @@ type Msg
     | ShootButtonUp
 
 
-initial : Dict Int (Material.Texture Color) -> Material.Texture Float -> ( Float, Float ) -> Model
-initial ballTextures roughnessTexture ( width, height ) =
+initial : Dict Int (Material.Texture Color) -> Material.Texture Float -> ( Quantity Float Pixels, Quantity Float Pixels ) -> Model
+initial ballTextures roughnessTexture dimensions =
     let
         time =
             -- TODO: consider getting the initial time
@@ -138,7 +138,7 @@ initial ballTextures roughnessTexture ( width, height ) =
     , ballTextures = ballTextures
     , roughnessTexture = roughnessTexture
     , time = time
-    , dimensions = ( Pixels.float width, Pixels.float height )
+    , dimensions = dimensions
     , zoom = Animator.init 0.9
     , azimuth = Animator.init (Angle.degrees -25)
     , elevation = Animator.init (Angle.degrees 30)
@@ -153,15 +153,11 @@ camera { azimuth, elevation, zoom, focalPoint } =
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.orbit
-                { focalPoint =
-                    Point3d.meters
-                        (Animator.linear focalPoint (Point3d.xCoordinate >> Length.inMeters >> Animator.at))
-                        (Animator.linear focalPoint (Point3d.yCoordinate >> Length.inMeters >> Animator.at))
-                        (Animator.linear focalPoint (Point3d.zCoordinate >> Length.inMeters >> Animator.at))
+                { focalPoint = pointFromTimeline focalPoint
                 , groundPlane = SketchPlane3d.xy
                 , azimuth = angleFromTimeline azimuth
                 , elevation = angleFromTimeline elevation
-                , distance = Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5) (Animator.linear zoom Animator.at)
+                , distance = Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5) (Animator.move zoom Animator.at)
                 }
         , verticalFieldOfView = Angle.degrees 24
         }
@@ -212,52 +208,29 @@ view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
         entitiesWithUI =
             case model.state of
                 PlacingBehindHeadString mouse _ ->
-                    placingBallEntities mouse Bodies.areaBehindTheHeadStringEntity :: entities
+                    Bodies.areaBehindTheHeadStringEntity :: placingBallEntities mouse :: entities
 
                 PlacingBallInHand mouse _ ->
-                    placingBallEntities mouse Scene3d.nothing :: entities
+                    placingBallEntities mouse :: entities
 
                 Playing _ playingState _ ->
                     let
                         axis =
                             cueAxis playingState model.azimuth
+
+                        isActive =
+                            canShoot axis world
                     in
-                    cueEntity world camera3d axis :: entities
+                    cueEntity camera3d axis isActive :: entities
 
                 _ ->
                     entities
-
-        cursor =
-            case model.state of
-                PlacingBallInHand HoveringOuside _ ->
-                    "default"
-
-                PlacingBehindHeadString HoveringOuside _ ->
-                    "default"
-
-                PlacingBallInHand _ _ ->
-                    "none"
-
-                PlacingBehindHeadString _ _ ->
-                    "none"
-
-                Playing (HoveringCueBall _ _) _ _ ->
-                    "pointer"
-
-                Playing (SettingCueElevation _) _ _ ->
-                    "ns-resize"
-
-                Simulating _ _ ->
-                    "wait"
-
-                _ ->
-                    "default"
     in
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" "0"
         , Html.Attributes.style "top" "0"
-        , Html.Attributes.style "cursor" cursor
+        , Html.Attributes.style "cursor" (currentCursor model.state)
         , Html.Events.preventDefaultOn "wheel"
             (Json.Decode.map
                 (\deltaY -> ( MouseWheel deltaY, True ))
@@ -359,26 +332,20 @@ canShoot axis world =
         (List.range 0 7)
 
 
-placingBallEntities : PlacingBallMouse -> Scene3d.Entity WorldCoordinates -> Scene3d.Entity WorldCoordinates
-placingBallEntities placingBall areaEntity =
+placingBallEntities : PlacingBallMouse -> Scene3d.Entity WorldCoordinates
+placingBallEntities placingBall =
     case placingBall of
         CanSpawnAt position ->
-            Scene3d.group
-                [ areaEntity
-                , Scene3d.sphereWithShadow
-                    (Material.matte (Color.rgb255 255 255 255))
-                    Bodies.ballSphere
-                    |> Scene3d.placeIn (Frame3d.atPoint position)
-                ]
+            Scene3d.sphereWithShadow
+                (Material.matte Color.white)
+                Bodies.ballSphere
+                |> Scene3d.placeIn (Frame3d.atPoint position)
 
         CannotSpawn position ->
-            Scene3d.group
-                [ areaEntity
-                , Scene3d.sphereWithShadow
-                    (Material.matte inactiveColor)
-                    Bodies.ballSphere
-                    |> Scene3d.placeIn (Frame3d.atPoint position)
-                ]
+            Scene3d.sphereWithShadow
+                (Material.matte inactiveColor)
+                Bodies.ballSphere
+                |> Scene3d.placeIn (Frame3d.atPoint position)
 
         HoveringOuside ->
             Scene3d.nothing
@@ -389,8 +356,8 @@ inactiveColor =
     Color.rgb255 130 130 130
 
 
-cueEntity : World Id -> Camera3d Meters WorldCoordinates -> Axis3d Meters WorldCoordinates -> Scene3d.Entity WorldCoordinates
-cueEntity world camera3d axis =
+cueEntity : Camera3d Meters WorldCoordinates -> Axis3d Meters WorldCoordinates -> Bool -> Scene3d.Entity WorldCoordinates
+cueEntity camera3d axis isActive =
     let
         viewpoint =
             Camera3d.viewpoint camera3d
@@ -434,7 +401,7 @@ cueEntity world camera3d axis =
             Scene3d.cylinderWithShadow
                 (Material.nonmetal
                     { baseColor =
-                        if canShoot axis world then
+                        if isActive then
                             Color.white
 
                         else
@@ -497,29 +464,65 @@ viewShootingStrength { state, time, dimensions } =
             Html.text ""
 
 
-currentPlayer : Model -> Player
-currentPlayer model =
-    case model.state of
-        PlacingBehindHeadString _ pool ->
-            EightBall.currentPlayer pool
+currentCursor : State -> String
+currentCursor state =
+    case state of
+        PlacingBallInHand HoveringOuside _ ->
+            "default"
 
-        Playing _ _ pool ->
-            EightBall.currentPlayer pool
+        PlacingBehindHeadString HoveringOuside _ ->
+            "default"
 
-        Simulating _ pool ->
-            EightBall.currentPlayer pool
+        PlacingBallInHand _ _ ->
+            "none"
 
-        PlacingBallInHand _ pool ->
-            EightBall.currentPlayer pool
+        PlacingBehindHeadString _ _ ->
+            "none"
 
-        GameOver winner _ ->
-            winner
+        Playing (HoveringCueBall _ _) _ _ ->
+            "pointer"
+
+        Playing (SettingCueElevation _) _ _ ->
+            "ns-resize"
+
+        Simulating _ _ ->
+            "wait"
+
+        _ ->
+            "default"
+
+
+currentPlayer : State -> String
+currentPlayer state =
+    let
+        currentPlayer_ =
+            case state of
+                PlacingBehindHeadString _ pool ->
+                    EightBall.currentPlayer pool
+
+                Playing _ _ pool ->
+                    EightBall.currentPlayer pool
+
+                Simulating _ pool ->
+                    EightBall.currentPlayer pool
+
+                PlacingBallInHand _ pool ->
+                    EightBall.currentPlayer pool
+
+                GameOver winner _ ->
+                    winner
+    in
+    case currentPlayer_ of
+        EightBall.Player1 ->
+            "Player 1"
+
+        EightBall.Player2 ->
+            "Player 2"
 
 
 currentTarget : State -> String
 currentTarget state =
     let
-        currentTarget_ : EightBall.CurrentTarget
         currentTarget_ =
             case state of
                 PlacingBehindHeadString _ pool ->
@@ -657,7 +660,7 @@ update msg model =
         MouseWheel deltaY ->
             let
                 newZoom =
-                    clamp 0 1 (Animator.linear model.zoom Animator.at - deltaY * 0.002)
+                    clamp 0 1 (Animator.move model.zoom Animator.at - deltaY * 0.002)
             in
             { model | zoom = Animator.go Animator.immediately newZoom model.zoom }
 
@@ -1117,11 +1120,22 @@ simulateWithEvents frame time world events =
         ( world, events )
 
 
+{-| Read the point value from the timeline
+-}
+pointFromTimeline : Timeline (Point3d Meters WorldCoordinates) -> Point3d Meters WorldCoordinates
+pointFromTimeline pointTimeline =
+    Point3d.fromRecord Length.meters <|
+        Animator.xyz pointTimeline
+            (Point3d.toMeters
+                >> (\p -> { x = Animator.at p.x, y = Animator.at p.y, z = Animator.at p.z })
+            )
+
+
 {-| Read the angle value from the timeline
 -}
 angleFromTimeline : Timeline Angle -> Angle
 angleFromTimeline angleTimeline =
-    Angle.radians (Animator.linear angleTimeline (Angle.inRadians >> Animator.at))
+    Angle.radians (Animator.move angleTimeline (Angle.inRadians >> Animator.at))
 
 
 {-| Make orbiting precision depend on zoom level.
@@ -1130,7 +1144,7 @@ Controls how much radians correspond to the change in mouse offset.
 orbitingPrecision : Timeline Float -> Quantity Float (Quantity.Rate Angle.Radians Pixels)
 orbitingPrecision zoomTimeline =
     Quantity.rate
-        (Angle.radians (0.2 + Animator.linear zoomTimeline Animator.at / 0.8))
+        (Angle.radians (0.2 + Animator.move zoomTimeline Animator.at / 0.8))
         (Pixels.pixels (180 / pi))
 
 
