@@ -75,7 +75,7 @@ type alias Model =
 
 
 type State
-    = PlacingBall PlacingBallMouse PoolWithBallInHand
+    = PlacingBall BallInHand PoolWithBallInHand
     | Playing PlayingMouse Cue (Pool EightBall.AwaitingPlayerShot)
     | Simulating (List ( Posix, ShotEvent )) (Pool EightBall.AwaitingPlayerShot)
     | GameOver Player (Pool EightBall.AwaitingStart)
@@ -111,7 +111,7 @@ type PlayingMouse
     | OutsideOfCueBall
 
 
-type PlacingBallMouse
+type BallInHand
     = OnTable CanPlace (Point3d Meters WorldCoordinates)
     | OutsideOfTable
 
@@ -849,7 +849,7 @@ shootingStrength startTime endTime =
     -(cos (duration / 2000 * pi) / 2) + 0.5
 
 
-canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> PlacingBallMouse
+canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
 canSpawnHere mouseRay spawnArea world =
     let
         hoveringTable =
