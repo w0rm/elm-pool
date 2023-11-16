@@ -1,6 +1,7 @@
 module Game exposing
     ( Model
     , Msg(..)
+    , ScreenCoordinates
     , State(..)
     , currentPlayer
     , currentTarget
@@ -34,11 +35,11 @@ import Physics.Body as Body
 import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
-import Pixels exposing (Pixels, pixels)
+import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
-import Rectangle2d
+import Rectangle2d exposing (Rectangle2d)
 import Rectangle3d exposing (Rectangle3d)
 import Scene3d
 import Scene3d.Light
@@ -60,7 +61,7 @@ type alias Model =
     { world : World Id
     , ballTextures : Dict Int (Texture Color)
     , roughnessTexture : Texture Float
-    , dimensions : ( Quantity Float Pixels, Quantity Float Pixels )
+    , window : Rectangle2d Pixels ScreenCoordinates
     , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
     , state : State
     , time : Posix
@@ -131,8 +132,8 @@ type Msg
     | ShootReleased
 
 
-initial : Dict Int (Texture Color) -> Texture Float -> ( Quantity Float Pixels, Quantity Float Pixels ) -> Model
-initial ballTextures roughnessTexture dimensions =
+initial : Dict Int (Texture Color) -> Texture Float -> Rectangle2d Pixels ScreenCoordinates -> Model
+initial ballTextures roughnessTexture window =
     let
         time =
             -- TODO: consider getting the initial time
@@ -142,7 +143,7 @@ initial ballTextures roughnessTexture dimensions =
     , ballTextures = ballTextures
     , roughnessTexture = roughnessTexture
     , time = time
-    , dimensions = dimensions
+    , window = window
     , zoom = Animator.init 0.9
     , azimuth = Animator.init (Angle.degrees -25)
     , elevation = Animator.init (Angle.degrees 30)
@@ -172,19 +173,8 @@ camera { azimuth, elevation, zoom, focalPoint } =
         }
 
 
-ray : Model -> Point2d Pixels ScreenCoordinates -> Axis3d Meters WorldCoordinates
-ray model =
-    let
-        ( width, height ) =
-            model.dimensions
-    in
-    Camera3d.ray
-        (camera model)
-        (Rectangle2d.with { x1 = pixels 0, y1 = height, x2 = width, y2 = pixels 0 })
-
-
 view : Model -> Html Msg
-view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
+view ({ world, ballTextures, roughnessTexture, window } as model) =
     let
         sunlight =
             Scene3d.Light.directional (Scene3d.Light.castsShadows True)
@@ -208,6 +198,11 @@ view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
             List.map
                 (Bodies.bodyToEntity roughnessTexture ballTextures)
                 (World.bodies world)
+
+        dimensions =
+            window
+                |> Rectangle2d.dimensions
+                |> Tuple.mapBoth Quantity.round Quantity.round
 
         entitiesWithUI =
             case model.state of
@@ -255,7 +250,7 @@ view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
             )
         ]
         [ Scene3d.custom
-            { dimensions = Tuple.mapBoth Quantity.round Quantity.round dimensions
+            { dimensions = dimensions
             , antialiasing = Scene3d.noAntialiasing
             , camera = camera3d
             , entities = entitiesWithUI
@@ -343,7 +338,7 @@ canShoot axis world =
 
 
 viewShootingStrength : Model -> Html Msg
-viewShootingStrength { state, time, dimensions } =
+viewShootingStrength { state, time, window } =
     case state of
         Playing _ { shootPressedAt } _ ->
             case shootPressedAt of
@@ -356,7 +351,10 @@ viewShootingStrength { state, time, dimensions } =
                             shootingStrength startTime time * (barHeight - 4)
 
                         height =
-                            Tuple.second dimensions |> Pixels.inPixels
+                            window
+                                |> Rectangle2d.dimensions
+                                |> Tuple.second
+                                |> Pixels.inPixels
 
                         barHeight =
                             height * 0.6
@@ -540,9 +538,13 @@ update msg model =
                                 }
 
                             EightBall.NextShot newPool ->
+                                let
+                                    newFocalPoint =
+                                        cueBallPosition newModel.world
+                                in
                                 { newModel
                                     | state = Playing OutsideOfCueBall initialCue newPool
-                                    , focalPoint = Animator.go Animator.quickly (cueBallPosition newModel.world) newModel.focalPoint
+                                    , focalPoint = Animator.go Animator.quickly newFocalPoint newModel.focalPoint
                                 }
 
                             EightBall.GameOver newPool { winner } ->
@@ -565,7 +567,16 @@ update msg model =
                     newModel
 
         Resize width height ->
-            { model | dimensions = ( Pixels.float (toFloat width), Pixels.float (toFloat height) ) }
+            let
+                newWindow =
+                    Rectangle2d.with
+                        { x1 = Pixels.pixels 0
+                        , y1 = Pixels.float (toFloat height)
+                        , x2 = Pixels.float (toFloat width)
+                        , y2 = Pixels.pixels 0
+                        }
+            in
+            { model | window = newWindow }
 
         MouseWheel deltaY ->
             let
@@ -629,8 +640,11 @@ update msg model =
                                         BehindHeadString _ ->
                                             Bodies.areaBehindTheHeadString
 
+                                mouseRay =
+                                    Camera3d.ray (camera model) model.window mousePosition
+
                                 newBallInHand =
-                                    placeBallInHand (ray model mousePosition) placingArea model.world
+                                    placeBallInHand mouseRay placingArea model.world
                             in
                             { model | state = PlacingBall newBallInHand pool }
 
@@ -646,8 +660,11 @@ update msg model =
 
                         Playing _ cue pool ->
                             let
+                                mouseRay =
+                                    Camera3d.ray (camera model) model.window mousePosition
+
                                 newMouse =
-                                    hoverCueBall (ray model mousePosition) model.world model.azimuth
+                                    hoverCueBall mouseRay model.world model.azimuth
                             in
                             { model | state = Playing newMouse cue pool }
 

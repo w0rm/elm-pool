@@ -11,7 +11,7 @@ import Html.Events
 import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)
-import Quantity exposing (Quantity)
+import Rectangle2d exposing (Rectangle2d)
 import Scene3d.Material as Material
 import Task
 import WebGL.Texture exposing (defaultOptions)
@@ -34,7 +34,7 @@ type Msg
 type alias LoadingModel =
     { ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Maybe (Material.Texture Float)
-    , dimensions : Maybe ( Quantity Float Pixels, Quantity Float Pixels )
+    , window : Maybe (Rectangle2d Pixels Game.ScreenCoordinates)
     , assetsPath : String
     }
 
@@ -85,7 +85,7 @@ init unsafeFlags =
             Maybe.withDefault "/public/" flags.assetsPath
     in
     ( Loading
-        { dimensions = Nothing
+        { window = Nothing
         , roughnessTexture = Nothing
         , ballTextures = Dict.empty
         , assetsPath = assetsPath
@@ -221,10 +221,14 @@ update msg model =
         ( GotInitialViewport { viewport }, Loading loadingModel ) ->
             loadComplete
                 { loadingModel
-                    | dimensions =
+                    | window =
                         Just
-                            ( Pixels.pixels viewport.width
-                            , Pixels.pixels viewport.height
+                            (Rectangle2d.with
+                                { x1 = Pixels.pixels 0
+                                , y1 = Pixels.pixels viewport.height
+                                , x2 = Pixels.pixels viewport.width
+                                , y2 = Pixels.pixels 0
+                                }
                             )
                 }
 
@@ -262,7 +266,7 @@ update msg model =
                 Game.initial
                     gameModel.ballTextures
                     gameModel.roughnessTexture
-                    gameModel.dimensions
+                    gameModel.window
 
         _ ->
             model
@@ -273,7 +277,7 @@ loadComplete model =
     if Dict.size model.ballTextures == 15 then
         Maybe.map2 (Game.initial model.ballTextures)
             model.roughnessTexture
-            model.dimensions
+            model.window
             |> Maybe.map (Running model.assetsPath)
             |> Maybe.withDefault (Loading model)
 
