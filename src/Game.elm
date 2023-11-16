@@ -850,15 +850,19 @@ shootingStrength startTime endTime =
 
 placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
 placeBallInHand mouseRay spawnArea world =
-    case Axis3d.intersectionWithRectangle Bodies.areaBallInHand mouseRay of
-        Just intersectionPoint ->
-            let
-                -- raise the ball up so that it is placed on the table
-                position =
-                    intersectionPoint
-                        |> Point3d.translateIn Direction3d.z Bodies.ballRadius
-            in
-            case Axis3d.intersectionWithRectangle spawnArea mouseRay of
+    let
+        -- raise the interection rectangles to vertically align with the center of the ball
+        elevatedWholeTableArea =
+            Bodies.areaBallInHand
+                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
+
+        elevatedSpawnArea =
+            spawnArea
+                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
+    in
+    case Axis3d.intersectionWithRectangle elevatedWholeTableArea mouseRay of
+        Just position ->
+            case Axis3d.intersectionWithRectangle elevatedSpawnArea mouseRay of
                 Just _ ->
                     let
                         canPlace =
