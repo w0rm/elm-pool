@@ -3,21 +3,29 @@ module Bodies exposing
     , areaBallInHand
     , areaBehindTheHeadString
     , areaBehindTheHeadStringEntity
-    , ballSphere
+    , ballRadius
     , bodyToEntity
+    , clipDepth
     , cueBall
+    , cueBallEntity
+    , cueEntity
+    , cueLength
+    , cueOffset
+    , cueRadius
     , world
     )
 
 import Acceleration
 import Angle
-import Axis3d
+import Axis3d exposing (Axis3d)
 import Block3d exposing (Block3d)
+import Camera3d exposing (Camera3d)
 import Color exposing (Color)
+import Cylinder3d
 import Dict exposing (Dict)
 import Direction3d
 import EightBall exposing (Ball)
-import Length exposing (Meters, millimeters)
+import Length exposing (Length, Meters)
 import Mass
 import Physics.Body as Body exposing (Body)
 import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
@@ -26,6 +34,7 @@ import Physics.Shape
 import Physics.World as World exposing (World)
 import Point2d
 import Point3d
+import Quantity
 import Rectangle2d
 import Rectangle3d exposing (Rectangle3d)
 import Scene3d exposing (Entity)
@@ -33,6 +42,7 @@ import Scene3d.Material as Material
 import SketchPlane3d
 import Sphere3d exposing (Sphere3d)
 import Vector3d
+import Viewpoint3d
 
 
 type Id
@@ -96,6 +106,65 @@ areaBehindTheHeadStringEntity =
             Scene3d.nothing
 
 
+inactiveColor : Color
+inactiveColor =
+    Color.rgb255 130 130 130
+
+
+cueEntity : Camera3d Meters WorldCoordinates -> Axis3d Meters WorldCoordinates -> Bool -> Scene3d.Entity WorldCoordinates
+cueEntity camera3d axis isActive =
+    let
+        viewPlane =
+            camera3d
+                |> Camera3d.viewpoint
+                |> Viewpoint3d.viewPlane
+                |> SketchPlane3d.toPlane
+
+        trimmedCueLength =
+            -- shorten the cue cylinder if intersects with the view plane
+            case Axis3d.intersectionWithPlane viewPlane axis of
+                Just point ->
+                    let
+                        distanceFromCamera =
+                            Point3d.distanceFrom (Axis3d.originPoint axis) point
+                                |> Quantity.minus clipDepth
+                                -- minus the offset from the cue ball
+                                |> Quantity.minus cueOffset
+                    in
+                    if Quantity.lessThanOrEqualTo cueLength distanceFromCamera then
+                        distanceFromCamera
+
+                    else
+                        cueLength
+
+                Nothing ->
+                    cueLength
+
+        maybeCylinder =
+            Cylinder3d.from
+                (Point3d.along axis cueOffset)
+                (Point3d.along axis (Quantity.plus trimmedCueLength cueOffset))
+                cueRadius
+    in
+    case maybeCylinder of
+        Just cylinder ->
+            Scene3d.cylinderWithShadow
+                (Material.nonmetal
+                    { baseColor =
+                        if isActive then
+                            Color.white
+
+                        else
+                            inactiveColor
+                    , roughness = 0.6
+                    }
+                )
+                cylinder
+
+        Nothing ->
+            Scene3d.nothing
+
+
 world : World Id
 world =
     World.empty
@@ -108,16 +177,36 @@ world =
         |> (\w -> List.foldl World.add w balls)
 
 
-radius : Float
-radius =
-    57.15 / 2
+ballRadius : Length
+ballRadius =
+    Length.millimeters (57.15 / 2)
+
+
+cueLength : Length
+cueLength =
+    Length.centimeters 150
+
+
+cueRadius : Length
+cueRadius =
+    Length.millimeters 6
+
+
+{-| Cue offset from the cue ball
+-}
+cueOffset : Length
+cueOffset =
+    Length.centimeters 2
+
+
+clipDepth : Length
+clipDepth =
+    Length.meters 0.1
 
 
 ballSphere : Sphere3d Meters BodyCoordinates
 ballSphere =
-    Sphere3d.atPoint
-        (Point3d.millimeters 0 0 0)
-        (millimeters radius)
+    Sphere3d.atOrigin ballRadius
 
 
 balls : List (Body Id)
@@ -139,10 +228,10 @@ balls =
                     row * (row + 1) // 2
 
                 distance =
-                    radius * sqrt 3
+                    Length.inMillimeters ballRadius * sqrt 3
 
                 x =
-                    (toFloat index - toFloat rowStartIndex - toFloat row / 2) * radius * 2
+                    (toFloat index - toFloat rowStartIndex - toFloat row / 2) * Length.inMillimeters ballRadius * 2
 
                 y =
                     (toFloat row - lastRow / 2) * distance
@@ -155,7 +244,7 @@ balls =
                 |> Body.withMaterial ballMaterial
                 |> Body.withDamping ballDamping
                 |> Body.withBehavior (Body.dynamic (Mass.grams 170))
-                |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) radius)
+                |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) (Length.inMillimeters ballRadius))
         )
         numbers
 
@@ -241,7 +330,18 @@ cueBall =
         |> Body.withMaterial ballMaterial
         |> Body.withDamping ballDamping
         |> Body.withBehavior (Body.dynamic (Mass.grams 170))
-        |> Body.translateBy (Vector3d.meters 0 (-2.1 / 4) radius)
+
+
+cueBallEntity : Bool -> Scene3d.Entity BodyCoordinates
+cueBallEntity isActive =
+    Scene3d.sphereWithShadow
+        (if isActive then
+            Material.matte Color.white
+
+         else
+            Material.matte inactiveColor
+        )
+        ballSphere
 
 
 ballDamping : { linear : Float, angular : Float }
