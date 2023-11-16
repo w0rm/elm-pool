@@ -35,7 +35,6 @@ import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
 import Pixels exposing (Pixels, pixels)
-import Plane3d
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Quantity)
@@ -228,6 +227,9 @@ view ({ world, ballTextures, roughnessTexture, dimensions } as model) =
                     in
                     cueBallEntity :: highlightAreaEntity :: entities
 
+                PlacingBall OutsideOfTable (BehindHeadString _) ->
+                    Bodies.areaBehindTheHeadStringEntity :: entities
+
                 Playing _ cue _ ->
                     let
                         axis =
@@ -392,9 +394,6 @@ viewShootingStrength { state, time, dimensions } =
 currentCursor : State -> String
 currentCursor state =
     case state of
-        PlacingBall OutsideOfTable _ ->
-            "default"
-
         PlacingBall (OnTable _ _) _ ->
             "none"
 
@@ -630,10 +629,10 @@ update msg model =
                                         BehindHeadString _ ->
                                             Bodies.areaBehindTheHeadString
 
-                                newMouse =
-                                    canSpawnHere (ray model mousePosition) placingArea model.world
+                                newBallInHand =
+                                    placeBallInHand (ray model mousePosition) placingArea model.world
                             in
-                            { model | state = PlacingBall newMouse pool }
+                            { model | state = PlacingBall newBallInHand pool }
 
                         Playing (ElevatingCue originalPosition) cue pool ->
                             let
@@ -849,33 +848,25 @@ shootingStrength startTime endTime =
     -(cos (duration / 2000 * pi) / 2) + 0.5
 
 
-canSpawnHere : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
-canSpawnHere mouseRay spawnArea world =
-    let
-        hoveringTable =
-            world
-                |> World.keepIf (\b -> Body.data b /= Floor)
-                |> World.raycast mouseRay
-                |> (/=) Nothing
-
-        planeIntersection =
-            Axis3d.intersectionWithPlane Plane3d.xy mouseRay
-    in
-    -- TODO: rather use a Rectangle3d that defines the table surface
-    case ( hoveringTable, planeIntersection ) of
-        ( True, Just point1 ) ->
+placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
+placeBallInHand mouseRay spawnArea world =
+    case Axis3d.intersectionWithRectangle Bodies.areaBallInHand mouseRay of
+        Just intersectionPoint ->
+            let
+                -- raise the ball up so that it is placed on the table
+                position =
+                    intersectionPoint
+                        |> Point3d.translateIn Direction3d.z Bodies.ballRadius
+            in
             case Axis3d.intersectionWithRectangle spawnArea mouseRay of
-                Just point2 ->
+                Just _ ->
                     let
-                        position =
-                            Point3d.translateIn Direction3d.z Bodies.ballRadius point2
-
-                        canSpawn =
+                        canPlace =
                             List.all
-                                (\b ->
-                                    case Body.data b of
+                                (\body ->
+                                    case Body.data body of
                                         Numbered _ ->
-                                            Point3d.distanceFrom position (Body.originPoint b)
+                                            Point3d.distanceFrom position (Body.originPoint body)
                                                 |> Quantity.greaterThan (Quantity.twice Bodies.ballRadius)
 
                                         _ ->
@@ -883,14 +874,14 @@ canSpawnHere mouseRay spawnArea world =
                                 )
                                 (World.bodies world)
                     in
-                    if canSpawn then
+                    if canPlace then
                         OnTable CanPlace position
 
                     else
                         OnTable CannotPlace position
 
                 Nothing ->
-                    OnTable CannotPlace (Point3d.translateIn Direction3d.z Bodies.ballRadius point1)
+                    OnTable CannotPlace position
 
         _ ->
             OutsideOfTable
