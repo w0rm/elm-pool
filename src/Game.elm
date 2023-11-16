@@ -95,7 +95,7 @@ type alias PlayingState =
 type
     PlayingMouse
     -- TODO: use HoveringCueBall to render the clickable area
-    = HoveringCueBall Angle Angle -- elevation and relative azimuth
+    = HoveringCueBall { hitRelativeAzimuth : Angle, hitElevation : Angle }
     | SettingCueElevation (Point2d Pixels ScreenCoordinates)
     | OutsideOfCueBall
 
@@ -113,7 +113,7 @@ initialPlayingState cueBallPosition =
 type PlacingBallMouse
     = CanSpawnAt (Point3d Meters WorldCoordinates)
     | CannotSpawn (Point3d Meters WorldCoordinates)
-    | HoveringOuside
+    | HoveringOutside
 
 
 type Msg
@@ -144,7 +144,7 @@ initial ballTextures roughnessTexture dimensions =
     , elevation = Animator.init (Angle.degrees 30)
     , focalPoint = Animator.init Point3d.origin
     , orbiting = Nothing
-    , state = PlacingBehindHeadString HoveringOuside (EightBall.rack time EightBall.start)
+    , state = PlacingBehindHeadString HoveringOutside (EightBall.rack time EightBall.start)
     }
 
 
@@ -347,7 +347,7 @@ placingBallEntities placingBall =
                 Bodies.ballSphere
                 |> Scene3d.placeIn (Frame3d.atPoint position)
 
-        HoveringOuside ->
+        HoveringOutside ->
             Scene3d.nothing
 
 
@@ -467,10 +467,10 @@ viewShootingStrength { state, time, dimensions } =
 currentCursor : State -> String
 currentCursor state =
     case state of
-        PlacingBallInHand HoveringOuside _ ->
+        PlacingBallInHand HoveringOutside _ ->
             "default"
 
-        PlacingBehindHeadString HoveringOuside _ ->
+        PlacingBehindHeadString HoveringOutside _ ->
             "default"
 
         PlacingBallInHand _ _ ->
@@ -479,7 +479,7 @@ currentCursor state =
         PlacingBehindHeadString _ _ ->
             "none"
 
-        Playing (HoveringCueBall _ _) _ _ ->
+        Playing (HoveringCueBall _) _ _ ->
             "pointer"
 
         Playing (SettingCueElevation _) _ _ ->
@@ -610,13 +610,13 @@ update msg model =
                             IllegalBreak newPool ->
                                 { newModel
                                     | world = Bodies.world -- Reset the table.
-                                    , state = PlacingBehindHeadString HoveringOuside (EightBall.rack time newPool)
+                                    , state = PlacingBehindHeadString HoveringOutside (EightBall.rack time newPool)
                                     , focalPoint = Animator.go Animator.quickly Point3d.origin newModel.focalPoint
                                 }
 
                             PlayersFault newPool ->
                                 { newModel
-                                    | state = PlacingBallInHand HoveringOuside newPool
+                                    | state = PlacingBallInHand HoveringOutside newPool
                                     , world = World.keepIf (\b -> Body.data b /= CueBall) newModel.world
                                     , focalPoint = Animator.go Animator.quickly Point3d.origin newModel.focalPoint
                                 }
@@ -693,7 +693,7 @@ update msg model =
                 PlacingBallInHand (CannotSpawn _) _ ->
                     model
 
-                Playing (HoveringCueBall hitRelativeAzimuth hitElevation) playingState pool ->
+                Playing (HoveringCueBall { hitRelativeAzimuth, hitElevation }) playingState pool ->
                     let
                         newPlayingState =
                             { playingState
@@ -831,7 +831,10 @@ hoverCueBall mouseRay world azimuthTimeline =
                     Quantity.lessThan (Angle.degrees 90) (Quantity.abs hitRelativeAzimuth)
             in
             if Body.data body == CueBall && hoveringFrontHemisphere then
-                HoveringCueBall hitRelativeAzimuth hitElevation
+                HoveringCueBall
+                    { hitRelativeAzimuth = hitRelativeAzimuth
+                    , hitElevation = hitElevation
+                    }
 
             else
                 OutsideOfCueBall
@@ -974,7 +977,7 @@ canSpawnHere mouseRay spawnArea world =
                     CannotSpawn (Point3d.translateIn Direction3d.z (Length.millimeters (57.15 / 2)) point1)
 
         _ ->
-            HoveringOuside
+            HoveringOutside
 
 
 {-| Find the frozen balls, that are touching the walls
