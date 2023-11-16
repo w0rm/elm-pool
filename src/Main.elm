@@ -4,14 +4,14 @@ import Browser
 import Browser.Dom
 import Color exposing (Color)
 import Dict exposing (Dict)
-import EightBall exposing (Player(..))
 import Game
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Json.Decode
 import Json.Encode
-import Pixels
+import Pixels exposing (Pixels)
+import Quantity exposing (Quantity)
 import Scene3d.Material as Material
 import Task
 import WebGL.Texture exposing (defaultOptions)
@@ -34,7 +34,7 @@ type Msg
 type alias LoadingModel =
     { ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Maybe (Material.Texture Float)
-    , dimensions : Maybe ( Float, Float )
+    , dimensions : Maybe ( Quantity Float Pixels, Quantity Float Pixels )
     , assetsPath : String
     }
 
@@ -146,21 +146,11 @@ viewCurrentStatus gameModel assetsPath =
 
             _ ->
                 Html.div statusStyle
-                    [ Html.text (currentPlayerString gameModel)
+                    [ Html.text (Game.currentPlayer gameModel.state)
                     , Html.text " - "
                     , Html.text (Game.currentTarget gameModel.state)
                     ]
         ]
-
-
-currentPlayerString : Game.Model -> String
-currentPlayerString gameModel =
-    case Game.currentPlayer gameModel of
-        Player1 ->
-            "Player 1"
-
-        Player2 ->
-            "Player 2"
 
 
 statusStyle : List (Html.Attribute Msg)
@@ -197,7 +187,7 @@ viewGameOver gameModel =
                , Html.Events.onClick StartNewGameButtonClicked
                ]
         )
-        [ Html.text (currentPlayerString gameModel)
+        [ Html.text (Game.currentPlayer gameModel.state)
         , Html.text " won!"
         , Html.div
             [ Html.Attributes.style "color" "rgba(86, 186, 79, 0.7)"
@@ -231,7 +221,11 @@ update msg model =
         ( GotInitialViewport { viewport }, Loading loadingModel ) ->
             loadComplete
                 { loadingModel
-                    | dimensions = Just ( viewport.width, viewport.height )
+                    | dimensions =
+                        Just
+                            ( Pixels.pixels viewport.width
+                            , Pixels.pixels viewport.height
+                            )
                 }
 
         ( GotBallTexture n maybeTexture, Loading loadingModel ) ->
@@ -264,17 +258,11 @@ update msg model =
             Running assetsPath newGameModel
 
         ( StartNewGameButtonClicked, Running assetsPath gameModel ) ->
-            let
-                ( x, y ) =
-                    gameModel.dimensions
-            in
             Running assetsPath <|
                 Game.initial
                     gameModel.ballTextures
                     gameModel.roughnessTexture
-                    ( Pixels.toFloat x
-                    , Pixels.toFloat y
-                    )
+                    gameModel.dimensions
 
         _ ->
             model
