@@ -186,7 +186,7 @@ view ballTextures roughnessTexture window model =
                 Shooting _ cue _ ->
                     let
                         axis =
-                            cueAxis (cueBallPosition model.world) model.camera.azimuth cue
+                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
 
                         isActive =
                             canShoot axis model.world
@@ -581,7 +581,7 @@ update window msg model =
                                     Camera.ray model.camera window mousePosition
 
                                 newMouse =
-                                    hoverCueBall mouseRay model.world model.camera.azimuth
+                                    hoverCueBall mouseRay model.world (Camera.azimuth model.camera)
                             in
                             { model | state = Shooting newMouse cue pool }
 
@@ -604,7 +604,7 @@ update window msg model =
                 Shooting mouse cue pool ->
                     let
                         axis =
-                            cueAxis (cueBallPosition model.world) model.camera.azimuth cue
+                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
                     in
                     -- the message can be sent many times
                     -- we need to check if the button isn't already pressed
@@ -627,7 +627,7 @@ update window msg model =
                 Shooting mouse cue pool ->
                     let
                         axis =
-                            cueAxis (cueBallPosition model.world) model.camera.azimuth cue
+                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
                     in
                     case ( canShoot axis model.world, cue.shootPressedAt ) of
                         ( True, Just startTime ) ->

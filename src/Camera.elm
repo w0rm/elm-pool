@@ -2,6 +2,7 @@ module Camera exposing
     ( Camera
     , ScreenCoordinates
     , animate
+    , azimuth
     , camera3d
     , focusOn
     , initial
@@ -33,21 +34,23 @@ type ScreenCoordinates
     = ScreenCoordinates Never
 
 
-type alias Camera =
-    { zoom : Timeline Float -- also used for orbiting precision
-    , azimuth : Angle -- also used for aiming (hit azimuth is relative to camera azimuth)
-    , elevation : Timeline Angle
-    , focalPoint : Timeline (Point3d Meters WorldCoordinates)
-    }
+type Camera
+    = Camera
+        { zoom : Timeline Float -- also used for orbiting precision
+        , azimuth : Angle -- also used for aiming (hit azimuth is relative to camera azimuth)
+        , elevation : Timeline Angle
+        , focalPoint : Timeline (Point3d Meters WorldCoordinates)
+        }
 
 
 initial : Camera
 initial =
-    { zoom = Animator.init 0.9
-    , azimuth = Angle.degrees -25
-    , elevation = Animator.init (Angle.degrees 30)
-    , focalPoint = Animator.init Point3d.origin
-    }
+    Camera
+        { zoom = Animator.init 0.9
+        , azimuth = Angle.degrees -25
+        , elevation = Animator.init (Angle.degrees 30)
+        , focalPoint = Animator.init Point3d.origin
+        }
 
 
 ray :
@@ -60,45 +63,51 @@ ray camera =
 
 
 camera3d : Camera -> Camera3d Meters WorldCoordinates
-camera3d { azimuth, elevation, zoom, focalPoint } =
+camera3d (Camera camera) =
     let
         distance =
-            Animator.move zoom Animator.at
+            Animator.move camera.zoom Animator.at
                 |> Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5)
     in
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.orbit
-                { focalPoint = pointFromTimeline focalPoint
+                { focalPoint = pointFromTimeline camera.focalPoint
                 , groundPlane = SketchPlane3d.xy
-                , azimuth = azimuth
-                , elevation = angleFromTimeline elevation
+                , azimuth = camera.azimuth
+                , elevation = angleFromTimeline camera.elevation
                 , distance = distance
                 }
         , verticalFieldOfView = Angle.degrees 24
         }
 
 
+azimuth : Camera -> Angle
+azimuth (Camera camera) =
+    camera.azimuth
+
+
 animate : Posix -> Camera -> Camera
-animate time camera =
-    { camera
-        | elevation = Animator.updateTimeline time camera.elevation
-        , zoom = Animator.updateTimeline time camera.zoom
-        , focalPoint = Animator.updateTimeline time camera.focalPoint
-    }
+animate time (Camera camera) =
+    Camera
+        { camera
+            | elevation = Animator.updateTimeline time camera.elevation
+            , zoom = Animator.updateTimeline time camera.zoom
+            , focalPoint = Animator.updateTimeline time camera.focalPoint
+        }
 
 
 mouseWheelZoom : Float -> Camera -> Camera
-mouseWheelZoom deltaY camera =
+mouseWheelZoom deltaY (Camera camera) =
     let
         newZoom =
             clamp 0 1 (Animator.move camera.zoom Animator.at - deltaY * 0.002)
     in
-    { camera | zoom = Animator.go Animator.immediately newZoom camera.zoom }
+    Camera { camera | zoom = Animator.go Animator.immediately newZoom camera.zoom }
 
 
 mouseOrbiting : Point2d Pixels ScreenCoordinates -> Point2d Pixels ScreenCoordinates -> Camera -> Camera
-mouseOrbiting originalPosition newPosition camera =
+mouseOrbiting originalPosition newPosition (Camera camera) =
     let
         ( deltaX, deltaY ) =
             newPosition
@@ -106,7 +115,7 @@ mouseOrbiting originalPosition newPosition camera =
                 |> Vector2d.components
 
         radiansInPixels =
-            orbitingPrecision camera
+            orbitingPrecision (Camera camera)
 
         newAzimuth =
             camera.azimuth
@@ -118,34 +127,37 @@ mouseOrbiting originalPosition newPosition camera =
                 |> Quantity.plus (Quantity.at radiansInPixels deltaY)
                 |> Quantity.clamp (Angle.degrees 6) (Angle.degrees 90)
     in
-    { camera
-        | azimuth = newAzimuth
-        , elevation = Animator.go Animator.immediately newElevation camera.elevation
-    }
+    Camera
+        { camera
+            | azimuth = newAzimuth
+            , elevation = Animator.go Animator.immediately newElevation camera.elevation
+        }
 
 
 zoomOut : Camera -> Camera
-zoomOut camera =
-    { camera
-        | zoom = Animator.go Animator.verySlowly 1 camera.zoom
-        , elevation = Animator.go Animator.verySlowly (Angle.degrees 50) camera.elevation
-    }
+zoomOut (Camera camera) =
+    Camera
+        { camera
+            | zoom = Animator.go Animator.verySlowly 1 camera.zoom
+            , elevation = Animator.go Animator.verySlowly (Angle.degrees 50) camera.elevation
+        }
 
 
 focusOn : Point3d Meters WorldCoordinates -> Camera -> Camera
-focusOn focalPoint camera =
-    { camera
-        | focalPoint = Animator.go Animator.quickly focalPoint camera.focalPoint
-    }
+focusOn focalPoint (Camera camera) =
+    Camera
+        { camera
+            | focalPoint = Animator.go Animator.quickly focalPoint camera.focalPoint
+        }
 
 
 {-| Make orbiting precision depend on zoom level.
 Controls how much radians correspond to the change in mouse offset.
 -}
 orbitingPrecision : Camera -> Quantity Float (Quantity.Rate Angle.Radians Pixels)
-orbitingPrecision { zoom } =
+orbitingPrecision (Camera camera) =
     Quantity.rate
-        (Angle.radians (0.2 + Animator.move zoom Animator.at / 0.8))
+        (Angle.radians (0.2 + Animator.move camera.zoom Animator.at / 0.8))
         (Pixels.pixels (180 / pi))
 
 
