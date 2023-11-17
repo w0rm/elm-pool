@@ -154,6 +154,7 @@ update window msg oldModel =
             preUpdate msg oldModel
     in
     case ( model.state, msg ) of
+        -- Start by moving the ball above the table
         ( PlacingBall _ pool, MouseMove mousePosition ) ->
             let
                 placingArea =
@@ -172,6 +173,7 @@ update window msg oldModel =
             in
             { model | state = PlacingBall newBallInHand pool }
 
+        -- If the ball is on the table and doesn't overlap other balls then place it
         ( PlacingBall (OnTable CanPlace position) poolWithBallInHand, MouseDown _ ) ->
             let
                 newPool =
@@ -188,11 +190,13 @@ update window msg oldModel =
                 , camera = Camera.focusOn position model.camera
             }
 
+        -- If the ball overlaps - do nothing
         ( PlacingBall (OnTable CannotPlace _) _, MouseDown _ ) ->
             -- this case is for preventing orbiting
             model
 
-        ( Shooting (TargetingCueBall _) cue pool, MouseMove mousePosition ) ->
+        -- Moving mouse over the cue ball lets us pick the hit target
+        ( Shooting (TargetingCueBall _) shot pool, MouseMove mousePosition ) ->
             let
                 mouseRay =
                     Camera.ray model.camera window mousePosition
@@ -200,15 +204,17 @@ update window msg oldModel =
                 newMouse =
                     targetCueBall mouseRay model.world (Camera.azimuth model.camera)
             in
-            { model | state = Shooting newMouse cue pool }
+            { model | state = Shooting newMouse shot pool }
 
-        ( Shooting (TargetingCueBall (Just hitTarget)) cue pool, MouseDown mousePosition ) ->
+        -- Mouse down on the hit target applies it to the next shot to be made
+        ( Shooting (TargetingCueBall (Just hitTarget)) shot pool, MouseDown mousePosition ) ->
             let
-                newCue =
-                    { cue | hitTarget = hitTarget }
+                newShot =
+                    { shot | hitTarget = hitTarget }
             in
-            { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
+            { model | state = Shooting (ElevatingCue mousePosition) newShot pool }
 
+        -- Change the cue elevation by moving the mouse with the button pressed
         ( Shooting (ElevatingCue originalPosition) cue pool, MouseMove mousePosition ) ->
             let
                 newElevation =
@@ -219,9 +225,11 @@ update window msg oldModel =
             in
             { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
 
+        -- Releasing the mouse button stops elevating the cue
         ( Shooting (ElevatingCue _) cue pool, MouseUp ) ->
             { model | state = Shooting (TargetingCueBall Nothing) cue pool }
 
+        -- Holding the shoot button down allows to select the force
         ( Shooting mouse cue pool, ShootPressed ) ->
             let
                 axis =
@@ -240,6 +248,7 @@ update window msg oldModel =
             else
                 model
 
+        -- Releasing the button shoots the ball!
         ( Shooting mouse cue pool, ShootReleased ) ->
             let
                 axis =
@@ -258,14 +267,17 @@ update window msg oldModel =
             else
                 { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
 
+        -- Simulate the physics!
         ( Simulating events pool, Tick time ) ->
             case simulate time model.world events pool of
+                -- Continue simulating on the next tick
                 Continue ( newWorld, newEvents ) ->
                     { model
                         | world = newWorld
                         , state = Simulating newEvents pool
                     }
 
+                -- Stop the simulation, decide what to do next!
                 Stop (EightBall.IllegalBreak newPool) ->
                     { model
                         | world = Bodies.world -- Reset the table.
