@@ -86,9 +86,8 @@ type PoolWithBallInHand
 
 
 type AimingCue
-    = TargetingCueBall { hitRelativeAzimuth : Angle, hitElevation : Angle }
+    = TargetingCueBall (Maybe { hitRelativeAzimuth : Angle, hitElevation : Angle })
     | ElevatingCue (Point2d Pixels ScreenCoordinates)
-    | OutsideOfCueBall
 
 
 type alias Shot =
@@ -110,6 +109,11 @@ initialShot =
     }
 
 
+initialState : Posix -> Pool EightBall.AwaitingRack -> State
+initialState time pool =
+    PlacingBall OutsideOfTable (BehindHeadString (EightBall.rack time pool))
+
+
 initial : Model
 initial =
     let
@@ -120,7 +124,7 @@ initial =
     { world = Bodies.world
     , time = time
     , camera = Camera.initial
-    , state = PlacingBall OutsideOfTable (BehindHeadString (EightBall.rack time EightBall.start))
+    , state = initialState time EightBall.start
     , orbiting = Nothing
     }
 
@@ -140,102 +144,179 @@ type Msg
 
 
 update : Rectangle2d Pixels ScreenCoordinates -> Msg -> Model -> Model
-update window msg model =
-    case msg of
-        Tick time ->
+update window msg oldModel =
+    let
+        model =
+            preUpdate msg oldModel
+    in
+    case ( model.state, msg ) of
+        ( PlacingBall _ pool, MouseMove mousePosition ) ->
             let
-                newModel =
-                    { model
-                        | time = time
-                        , camera = Camera.animate time model.camera
+                placingArea =
+                    case pool of
+                        Anywhere _ ->
+                            Bodies.areaBallInHand
+
+                        BehindHeadString _ ->
+                            Bodies.areaBehindTheHeadString
+
+                mouseRay =
+                    Camera.ray model.camera window mousePosition
+
+                newBallInHand =
+                    placeBallInHand mouseRay placingArea model.world
+            in
+            { model | state = PlacingBall newBallInHand pool }
+
+        ( PlacingBall (OnTable CanPlace position) poolWithBallInHand, MouseDown _ ) ->
+            let
+                newPool =
+                    case poolWithBallInHand of
+                        BehindHeadString pool ->
+                            EightBall.placeBallBehindHeadstring model.time pool
+
+                        Anywhere pool ->
+                            EightBall.placeBallInHand model.time pool
+            in
+            { model
+                | state = Shooting (TargetingCueBall Nothing) initialShot newPool
+                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+                , camera = Camera.focusOn position model.camera
+            }
+
+        ( PlacingBall (OnTable CannotPlace _) _, MouseDown _ ) ->
+            -- this case is for preventing orbiting
+            model
+
+        ( Shooting (TargetingCueBall _) cue pool, MouseMove mousePosition ) ->
+            let
+                mouseRay =
+                    Camera.ray model.camera window mousePosition
+
+                newMouse =
+                    targetCueBall mouseRay model.world (Camera.azimuth model.camera)
+            in
+            { model | state = Shooting newMouse cue pool }
+
+        ( Shooting (TargetingCueBall (Just target)) cue pool, MouseDown mousePosition ) ->
+            let
+                newCue =
+                    { cue
+                        | hitRelativeAzimuth = target.hitRelativeAzimuth
+                        , hitElevation = target.hitElevation
                     }
             in
-            case newModel.state of
-                Simulating events pool ->
-                    if ballsStoppedMoving newModel.world then
-                        case EightBall.playerShot (List.reverse events) pool of
-                            EightBall.IllegalBreak newPool ->
-                                { newModel
-                                    | world = Bodies.world -- Reset the table.
-                                    , state = PlacingBall OutsideOfTable (BehindHeadString (EightBall.rack time newPool))
-                                    , camera = Camera.focusOn Point3d.origin newModel.camera
-                                }
+            { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
 
-                            EightBall.PlayersFault newPool ->
-                                { newModel
-                                    | state = PlacingBall OutsideOfTable (Anywhere newPool)
-                                    , world = World.keepIf (\b -> Body.data b /= CueBall) newModel.world
-                                    , camera = Camera.focusOn Point3d.origin newModel.camera
-                                }
+        ( Shooting (ElevatingCue originalPosition) cue pool, MouseMove mousePosition ) ->
+            let
+                newElevation =
+                    elevateCue originalPosition mousePosition model.camera cue.cueElevation
 
-                            EightBall.NextShot newPool ->
-                                let
-                                    newFocalPoint =
-                                        cueBallPosition newModel.world
-                                in
-                                { newModel
-                                    | state = Shooting OutsideOfCueBall initialShot newPool
-                                    , camera = Camera.focusOn newFocalPoint newModel.camera
-                                }
+                newCue =
+                    { cue | cueElevation = newElevation }
+            in
+            { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
 
-                            EightBall.GameOver newPool { winner } ->
-                                { newModel
-                                    | state = GameOver winner newPool
-                                    , camera = Camera.focusOn Point3d.origin newModel.camera
-                                }
+        ( Shooting (ElevatingCue _) cue pool, MouseUp ) ->
+            { model | state = Shooting (TargetingCueBall Nothing) cue pool }
 
-                    else
-                        let
-                            ( newWorld, newEvents ) =
-                                simulateWithEvents 2 time newModel.world events
-                        in
-                        { newModel
-                            | state = Simulating newEvents pool
-                            , world = newWorld
-                        }
+        ( Shooting mouse cue pool, ShootPressed ) ->
+            let
+                axis =
+                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
+            in
+            -- the message can be sent many times
+            -- we need to check if the button isn't already pressed
+            if canShoot axis model.world && cue.shootPressedAt == Nothing then
+                let
+                    -- save the time the buttom was pressed
+                    newCue =
+                        { cue | shootPressedAt = Just model.time }
+                in
+                { model | state = Shooting mouse newCue pool }
 
-                _ ->
-                    newModel
+            else
+                model
 
-        MouseWheel deltaY ->
-            { model | camera = Camera.mouseWheelZoom deltaY model.camera }
+        ( Shooting mouse cue pool, ShootReleased ) ->
+            let
+                axis =
+                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
 
-        MouseDown mousePosition ->
-            case model.state of
-                PlacingBall (OnTable CanPlace position) poolWithBallInHand ->
-                    let
-                        newPool =
-                            case poolWithBallInHand of
-                                BehindHeadString pool ->
-                                    EightBall.placeBallBehindHeadstring model.time pool
+                startTime =
+                    Maybe.withDefault model.time cue.shootPressedAt
+            in
+            if canShoot axis model.world then
+                { model
+                    | state = Simulating [] pool
+                    , camera = Camera.zoomOut model.camera
+                    , world = shoot axis startTime model.time (EightBall.isBreak pool) model.world
+                }
 
-                                Anywhere pool ->
-                                    EightBall.placeBallInHand model.time pool
-                    in
+            else
+                { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
+
+        ( Simulating events pool, Tick time ) ->
+            case simulate time model.world events pool of
+                Continue ( newWorld, newEvents ) ->
                     { model
-                        | state = Shooting OutsideOfCueBall initialShot newPool
-                        , world = World.add (Body.moveTo position Bodies.cueBall) model.world
-                        , camera = Camera.focusOn position model.camera
+                        | world = newWorld
+                        , state = Simulating newEvents pool
                     }
 
-                -- these two cases are for preventing orbiting, because
-                -- in this case we render a grayed out cue ball at the cursor
-                PlacingBall (OnTable CannotPlace _) _ ->
-                    model
+                Stop (EightBall.IllegalBreak newPool) ->
+                    { model
+                        | world = Bodies.world -- Reset the table.
+                        , state = initialState time newPool
+                        , camera = Camera.focusOn Point3d.origin model.camera
+                    }
 
-                Shooting (TargetingCueBall { hitRelativeAzimuth, hitElevation }) cue pool ->
+                Stop (EightBall.PlayersFault newPool) ->
+                    { model
+                        | world = World.keepIf (\b -> Body.data b /= CueBall) model.world
+                        , state = PlacingBall OutsideOfTable (Anywhere newPool)
+                        , camera = Camera.focusOn Point3d.origin model.camera
+                    }
+
+                Stop (EightBall.NextShot newPool) ->
                     let
-                        newCue =
-                            { cue
-                                | hitRelativeAzimuth = hitRelativeAzimuth
-                                , hitElevation = hitElevation
-                            }
+                        newFocalPoint =
+                            cueBallPosition model.world
                     in
-                    { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
+                    { model
+                        | state = Shooting (TargetingCueBall Nothing) initialShot newPool
+                        , camera = Camera.focusOn newFocalPoint model.camera
+                    }
 
-                _ ->
-                    { model | orbiting = Just mousePosition }
+                Stop (EightBall.GameOver newPool { winner }) ->
+                    { model
+                        | state = GameOver winner newPool
+                        , camera = Camera.focusOn Point3d.origin model.camera
+                    }
 
+        -- this case is here, to let the cases above prevent orbiting
+        -- by intercepting the MouseDown event
+        ( _, MouseDown mousePosition ) ->
+            { model | orbiting = Just mousePosition }
+
+        _ ->
+            model
+
+
+{-| Perform the updates that are always necessary no matter the game state
+-}
+preUpdate : Msg -> Model -> Model
+preUpdate msg model =
+    case msg of
+        -- advance the time
+        Tick time ->
+            { model
+                | time = time
+                , camera = Camera.animate time model.camera
+            }
+
+        -- continue orbiting if already started
         MouseMove mousePosition ->
             case model.orbiting of
                 Just originalPosition ->
@@ -248,104 +329,17 @@ update window msg model =
                     { model | camera = newCamera, orbiting = Just mousePosition }
 
                 Nothing ->
-                    case model.state of
-                        PlacingBall _ pool ->
-                            let
-                                placingArea =
-                                    case pool of
-                                        Anywhere _ ->
-                                            Bodies.areaBallInHand
+                    model
 
-                                        BehindHeadString _ ->
-                                            Bodies.areaBehindTheHeadString
-
-                                mouseRay =
-                                    Camera.ray model.camera window mousePosition
-
-                                newBallInHand =
-                                    placeBallInHand mouseRay placingArea model.world
-                            in
-                            { model | state = PlacingBall newBallInHand pool }
-
-                        Shooting (ElevatingCue originalPosition) cue pool ->
-                            let
-                                newElevation =
-                                    elevateCue originalPosition mousePosition model.camera cue.cueElevation
-
-                                newCue =
-                                    { cue | cueElevation = newElevation }
-                            in
-                            { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
-
-                        Shooting _ cue pool ->
-                            let
-                                mouseRay =
-                                    Camera.ray model.camera window mousePosition
-
-                                newMouse =
-                                    targetCueBall mouseRay model.world (Camera.azimuth model.camera)
-                            in
-                            { model | state = Shooting newMouse cue pool }
-
-                        _ ->
-                            model
-
+        -- always stop orbiting on mouse up
         MouseUp ->
-            case model.state of
-                Shooting _ cue pool ->
-                    { model
-                        | state = Shooting OutsideOfCueBall cue pool
-                        , orbiting = Nothing
-                    }
+            { model | orbiting = Nothing }
 
-                _ ->
-                    { model | orbiting = Nothing }
+        MouseWheel deltaY ->
+            { model | camera = Camera.mouseWheelZoom deltaY model.camera }
 
-        ShootPressed ->
-            case model.state of
-                Shooting mouse cue pool ->
-                    let
-                        axis =
-                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
-                    in
-                    -- the message can be sent many times
-                    -- we need to check if the button isn't already pressed
-                    if canShoot axis model.world && cue.shootPressedAt == Nothing then
-                        let
-                            -- save the time the buttom was pressed
-                            newCue =
-                                { cue | shootPressedAt = Just model.time }
-                        in
-                        { model | state = Shooting mouse newCue pool }
-
-                    else
-                        model
-
-                _ ->
-                    model
-
-        ShootReleased ->
-            case model.state of
-                Shooting mouse cue pool ->
-                    let
-                        axis =
-                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
-
-                        startTime =
-                            Maybe.withDefault model.time cue.shootPressedAt
-                    in
-                    if canShoot axis model.world then
-                        { model
-                            | state = Simulating [] pool
-                            , camera = Camera.zoomOut model.camera
-                            , world = shoot axis startTime model.time (EightBall.isBreak pool) model.world
-                        }
-
-                    else
-                        { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
-
-                _ ->
-                    model
+        _ ->
+            model
 
 
 
@@ -429,15 +423,17 @@ targetCueBall mouseRay world azimuth =
             in
             if Body.data body == CueBall && hoveringFrontHemisphere then
                 TargetingCueBall
-                    { hitRelativeAzimuth = hitRelativeAzimuth
-                    , hitElevation = hitElevation
-                    }
+                    (Just
+                        { hitRelativeAzimuth = hitRelativeAzimuth
+                        , hitElevation = hitElevation
+                        }
+                    )
 
             else
-                OutsideOfCueBall
+                TargetingCueBall Nothing
 
         Nothing ->
-            OutsideOfCueBall
+            TargetingCueBall Nothing
 
 
 {-| Calculate the new cue elevation using the exising elevation and the mouse y offset.
@@ -596,15 +592,28 @@ shootingStrength startTime endTime =
 -- Simulation
 
 
-ballsStoppedMoving : World Id -> Bool
-ballsStoppedMoving world =
-    List.all
-        (\body ->
-            Body.velocity body
-                |> Vector3d.length
-                |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
-        )
-        (World.bodies world)
+type SimulatedWorld
+    = Continue ( World Id, List ( Posix, ShotEvent ) )
+    | Stop EightBall.WhatHappened
+
+
+simulate : Posix -> World Id -> List ( Posix, ShotEvent ) -> Pool EightBall.AwaitingPlayerShot -> SimulatedWorld
+simulate time world events pool =
+    let
+        ballsStoppedMoving =
+            List.all
+                (\body ->
+                    Body.velocity body
+                        |> Vector3d.length
+                        |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
+                )
+                (World.bodies world)
+    in
+    if ballsStoppedMoving then
+        Stop (EightBall.playerShot (List.reverse events) pool)
+
+    else
+        Continue (simulateWithEvents 2 time world events)
 
 
 {-| Simulate multiple frames and collect the game events
