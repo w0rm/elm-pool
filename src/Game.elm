@@ -50,6 +50,10 @@ import Vector2d
 import Vector3d
 
 
+
+-- MODEL
+
+
 type alias Model =
     { time : Posix
     , world : World Id
@@ -66,9 +70,25 @@ type State
     | GameOver Player (Pool EightBall.AwaitingStart)
 
 
+type BallInHand
+    = OnTable CanPlace (Point3d Meters WorldCoordinates)
+    | OutsideOfTable
+
+
+type CanPlace
+    = CanPlace
+    | CannotPlace
+
+
 type PoolWithBallInHand
     = BehindHeadString (Pool EightBall.AwaitingPlaceBallBehindHeadstring)
     | Anywhere (Pool EightBall.AwaitingPlaceBallInHand)
+
+
+type AimingCue
+    = TargetingCueBall { hitRelativeAzimuth : Angle, hitElevation : Angle }
+    | ElevatingCue (Point2d Pixels ScreenCoordinates)
+    | OutsideOfCueBall
 
 
 type alias Shot =
@@ -90,32 +110,6 @@ initialShot =
     }
 
 
-type AimingCue
-    = TargetingCueBall { hitRelativeAzimuth : Angle, hitElevation : Angle }
-    | ElevatingCue (Point2d Pixels ScreenCoordinates)
-    | OutsideOfCueBall
-
-
-type BallInHand
-    = OnTable CanPlace (Point3d Meters WorldCoordinates)
-    | OutsideOfTable
-
-
-type CanPlace
-    = CanPlace
-    | CannotPlace
-
-
-type Msg
-    = Tick Posix
-    | MouseWheel Float
-    | MouseDown (Point2d Pixels ScreenCoordinates)
-    | MouseMove (Point2d Pixels ScreenCoordinates)
-    | MouseUp
-    | ShootPressed
-    | ShootReleased
-
-
 initial : Model
 initial =
     let
@@ -131,310 +125,18 @@ initial =
     }
 
 
-view : Dict Int (Texture Color) -> Texture Float -> Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg
-view ballTextures roughnessTexture window model =
-    let
-        sunlight =
-            Scene3d.Light.directional (Scene3d.Light.castsShadows True)
-                { direction = Direction3d.xyZ (Angle.degrees 135) (Angle.degrees -60)
-                , intensity = Illuminance.lux 10000
-                , chromaticity = Scene3d.Light.daylight
-                }
 
-        environmentalLighting =
-            Scene3d.Light.soft
-                { upDirection = Direction3d.positiveZ
-                , chromaticity = Scene3d.Light.daylight
-                , intensityAbove = Illuminance.lux 3000
-                , intensityBelow = Illuminance.lux 0
-                }
-
-        camera3d =
-            Camera.camera3d model.camera
-
-        entities =
-            List.map
-                (Bodies.bodyToEntity roughnessTexture ballTextures)
-                (World.bodies model.world)
-
-        dimensions =
-            window
-                |> Rectangle2d.dimensions
-                |> Tuple.mapBoth Quantity.round Quantity.round
-
-        entitiesWithUI =
-            case model.state of
-                PlacingBall (OnTable spawn position) poolWithBallInHand ->
-                    let
-                        highlightAreaEntity =
-                            case poolWithBallInHand of
-                                BehindHeadString _ ->
-                                    Bodies.areaBehindTheHeadStringEntity
-
-                                Anywhere _ ->
-                                    Scene3d.nothing
-
-                        cueBallEntity =
-                            Bodies.cueBallEntity (spawn == CanPlace)
-                                |> Scene3d.placeIn (Frame3d.atPoint position)
-                    in
-                    cueBallEntity :: highlightAreaEntity :: entities
-
-                PlacingBall OutsideOfTable (BehindHeadString _) ->
-                    Bodies.areaBehindTheHeadStringEntity :: entities
-
-                Shooting _ cue _ ->
-                    let
-                        axis =
-                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
-
-                        isActive =
-                            canShoot axis model.world
-                    in
-                    Bodies.cueEntity camera3d axis isActive :: entities
-
-                _ ->
-                    entities
-    in
-    Html.div
-        [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" "0"
-        , Html.Attributes.style "top" "0"
-        , Html.Attributes.style "cursor" (currentCursor model.state)
-        , Html.Events.preventDefaultOn "wheel"
-            (Json.Decode.map
-                (\deltaY -> ( MouseWheel deltaY, True ))
-                (Json.Decode.field "deltaY" Json.Decode.float)
-            )
-        ]
-        [ Scene3d.custom
-            { dimensions = dimensions
-            , antialiasing = Scene3d.noAntialiasing
-            , camera = camera3d
-            , entities = entitiesWithUI
-            , lights = Scene3d.twoLights environmentalLighting sunlight
-            , exposure = Scene3d.exposureValue 13
-            , whiteBalance = Scene3d.Light.daylight
-            , clipDepth = Bodies.clipDepth
-            , background = Scene3d.backgroundColor Color.black
-            , toneMapping = Scene3d.noToneMapping
-            }
-        , viewShootingStrength window model
-        ]
+-- UPDATE
 
 
-{-| Axis from the hit point on the cue ball along the cue
--}
-cueAxis : Point3d Meters WorldCoordinates -> Angle -> Shot -> Axis3d Meters WorldCoordinates
-cueAxis ballPosition cameraAzimuth { hitRelativeAzimuth, cueElevation, hitElevation } =
-    let
-        hitAzimuth =
-            cameraAzimuth
-                |> Quantity.plus hitRelativeAzimuth
-
-        pointDirection =
-            Direction3d.xyZ hitAzimuth hitElevation
-
-        pointOnCueBall =
-            Point3d.translateIn pointDirection Bodies.ballRadius ballPosition
-
-        axisDirection =
-            Direction3d.xyZ cameraAzimuth cueElevation
-    in
-    Axis3d.through pointOnCueBall axisDirection
-
-
-{-| Check if the cue doesn't overlap with any other objects
--}
-canShoot : Axis3d Meters WorldCoordinates -> World Id -> Bool
-canShoot axis world =
-    let
-        direction =
-            Axis3d.direction axis
-
-        -- point on the perimeter of the tip of the cue cylinder,
-        -- where the cue is placed at the hit point on the ball
-        pointOnCueEnd =
-            Point3d.translateIn
-                (Direction3d.perpendicularTo direction)
-                Bodies.cueRadius
-                (Axis3d.originPoint axis)
-
-        -- ignore collision with the cue ball
-        worldWithoutCueBall =
-            World.keepIf (\b -> Body.data b /= CueBall) world
-    in
-    -- cast 8 rays along the surface of the cue cylinder
-    List.all
-        (\n ->
-            let
-                rotatedPoint =
-                    pointOnCueEnd
-                        |> Point3d.rotateAround axis (Angle.turns (toFloat n / 8))
-
-                cueRay =
-                    Axis3d.through rotatedPoint direction
-            in
-            case World.raycast cueRay worldWithoutCueBall of
-                Just { point, body } ->
-                    let
-                        collisionPoint =
-                            point |> Point3d.placeIn (Body.frame body)
-                    in
-                    -- if the distance is greater than the cue length + offset, then there is no overlap
-                    rotatedPoint
-                        |> Point3d.distanceFrom collisionPoint
-                        |> Quantity.greaterThan (Quantity.plus Bodies.cueOffset Bodies.cueLength)
-
-                Nothing ->
-                    True
-        )
-        (List.range 0 7)
-
-
-viewShootingStrength : Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg
-viewShootingStrength window { state, time } =
-    case state of
-        Shooting _ { shootPressedAt } _ ->
-            case shootPressedAt of
-                Nothing ->
-                    Html.text ""
-
-                Just startTime ->
-                    let
-                        progressHeight =
-                            shootingStrength startTime time * (barHeight - 4)
-
-                        height =
-                            window
-                                |> Rectangle2d.dimensions
-                                |> Tuple.second
-                                |> Pixels.inPixels
-
-                        barHeight =
-                            height * 0.6
-
-                        barBottom =
-                            (height - barHeight) / 2
-                    in
-                    Html.div []
-                        [ Html.div
-                            [ Html.Attributes.style "position" "absolute"
-                            , Html.Attributes.style "right" "50px"
-                            , Html.Attributes.style "bottom" (String.fromFloat barBottom ++ "px")
-                            , Html.Attributes.style "width" "40px"
-                            , Html.Attributes.style "height" (String.fromFloat barHeight ++ "px")
-                            , Html.Attributes.style "border" "2px solid #fff"
-                            , Html.Attributes.style "border-radius" "10px"
-                            ]
-                            []
-                        , Html.div
-                            [ Html.Attributes.style "position" "absolute"
-                            , Html.Attributes.style "right" "54px"
-                            , Html.Attributes.style "bottom" (String.fromFloat (barBottom + 4) ++ "px")
-                            , Html.Attributes.style "width" "36px"
-                            , Html.Attributes.style "background" "#fff"
-                            , Html.Attributes.style "border-radius" "6px"
-                            , Html.Attributes.style "height" (String.fromFloat progressHeight ++ "px")
-                            ]
-                            []
-                        ]
-
-        _ ->
-            Html.text ""
-
-
-currentCursor : State -> String
-currentCursor state =
-    case state of
-        PlacingBall (OnTable _ _) _ ->
-            "none"
-
-        Shooting (TargetingCueBall _) _ _ ->
-            "pointer"
-
-        Shooting (ElevatingCue _) _ _ ->
-            "ns-resize"
-
-        Simulating _ _ ->
-            "wait"
-
-        _ ->
-            "default"
-
-
-currentPlayer : State -> String
-currentPlayer state =
-    let
-        currentPlayer_ =
-            case state of
-                PlacingBall _ (BehindHeadString pool) ->
-                    EightBall.currentPlayer pool
-
-                Shooting _ _ pool ->
-                    EightBall.currentPlayer pool
-
-                Simulating _ pool ->
-                    EightBall.currentPlayer pool
-
-                PlacingBall _ (Anywhere pool) ->
-                    EightBall.currentPlayer pool
-
-                GameOver winner _ ->
-                    winner
-    in
-    case currentPlayer_ of
-        EightBall.Player1 ->
-            "Player 1"
-
-        EightBall.Player2 ->
-            "Player 2"
-
-
-currentTarget : State -> String
-currentTarget state =
-    let
-        currentTarget_ =
-            case state of
-                PlacingBall _ (BehindHeadString pool) ->
-                    EightBall.currentTarget pool
-
-                Shooting _ _ pool ->
-                    EightBall.currentTarget pool
-
-                Simulating _ pool ->
-                    EightBall.currentTarget pool
-
-                PlacingBall _ (Anywhere pool) ->
-                    EightBall.currentTarget pool
-
-                GameOver _ pool ->
-                    EightBall.currentTarget pool
-    in
-    case currentTarget_ of
-        EightBall.OpenTable ->
-            "Open Table"
-
-        EightBall.Solids ->
-            "Solids"
-
-        EightBall.Stripes ->
-            "Stripes"
-
-        EightBall.EightBall ->
-            "8-Ball"
-
-
-subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.batch
-        [ Browser.Events.onKeyDown (decodeKey ShootPressed)
-        , Browser.Events.onKeyUp (decodeKey ShootReleased)
-        , Browser.Events.onAnimationFrame Tick
-        , Browser.Events.onMouseDown (decodeMouse MouseDown)
-        , Browser.Events.onMouseMove (decodeMouse MouseMove)
-        , Browser.Events.onMouseUp (Json.Decode.succeed MouseUp)
-        ]
+type Msg
+    = Tick Posix
+    | MouseWheel Float
+    | MouseDown (Point2d Pixels ScreenCoordinates)
+    | MouseMove (Point2d Pixels ScreenCoordinates)
+    | MouseUp
+    | ShootPressed
+    | ShootReleased
 
 
 update : Rectangle2d Pixels ScreenCoordinates -> Msg -> Model -> Model
@@ -581,7 +283,7 @@ update window msg model =
                                     Camera.ray model.camera window mousePosition
 
                                 newMouse =
-                                    hoverCueBall mouseRay model.world (Camera.azimuth model.camera)
+                                    targetCueBall mouseRay model.world (Camera.azimuth model.camera)
                             in
                             { model | state = Shooting newMouse cue pool }
 
@@ -628,24 +330,79 @@ update window msg model =
                     let
                         axis =
                             cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
-                    in
-                    case ( canShoot axis model.world, cue.shootPressedAt ) of
-                        ( True, Just startTime ) ->
-                            { model
-                                | state = Simulating [] pool
-                                , camera = Camera.zoomOut model.camera
-                                , world = shoot axis startTime model.time (EightBall.isBreak pool) model.world
-                            }
 
-                        _ ->
-                            { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
+                        startTime =
+                            Maybe.withDefault model.time cue.shootPressedAt
+                    in
+                    if canShoot axis model.world then
+                        { model
+                            | state = Simulating [] pool
+                            , camera = Camera.zoomOut model.camera
+                            , world = shoot axis startTime model.time (EightBall.isBreak pool) model.world
+                        }
+
+                    else
+                        { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
 
                 _ ->
                     model
 
 
-hoverCueBall : Axis3d Meters WorldCoordinates -> World Id -> Angle -> AimingCue
-hoverCueBall mouseRay world azimuth =
+
+-- Ball in hand
+
+
+placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
+placeBallInHand mouseRay spawnArea world =
+    let
+        -- raise the interection rectangles to vertically align with the center of the ball
+        elevatedWholeTableArea =
+            Bodies.areaBallInHand
+                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
+
+        elevatedSpawnArea =
+            spawnArea
+                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
+    in
+    case Axis3d.intersectionWithRectangle elevatedWholeTableArea mouseRay of
+        Just position ->
+            case Axis3d.intersectionWithRectangle elevatedSpawnArea mouseRay of
+                Just _ ->
+                    let
+                        canPlace =
+                            List.all
+                                (\body ->
+                                    case Body.data body of
+                                        Numbered _ ->
+                                            Point3d.distanceFrom position (Body.originPoint body)
+                                                |> Quantity.greaterThan (Quantity.twice Bodies.ballRadius)
+
+                                        _ ->
+                                            True
+                                )
+                                (World.bodies world)
+                    in
+                    if canPlace then
+                        OnTable CanPlace position
+
+                    else
+                        OnTable CannotPlace position
+
+                Nothing ->
+                    OnTable CannotPlace position
+
+        _ ->
+            OutsideOfTable
+
+
+
+-- Aiming cue
+
+
+{-| Pick a point on the cue ball to hit
+-}
+targetCueBall : Axis3d Meters WorldCoordinates -> World Id -> Angle -> AimingCue
+targetCueBall mouseRay world azimuth =
     case World.raycast mouseRay world of
         Just { body, normal } ->
             let
@@ -704,6 +461,91 @@ elevateCue originalPosition newPosition camera elevation =
         |> Quantity.clamp (Angle.degrees 0) (Angle.degrees 90)
 
 
+
+-- Shooting
+
+
+{-| Get the position of the cue ball from the world
+-}
+cueBallPosition : World Id -> Point3d Meters WorldCoordinates
+cueBallPosition world =
+    world
+        |> World.keepIf (\b -> Body.data b == CueBall)
+        |> World.bodies
+        |> List.head
+        |> Maybe.map Body.originPoint
+        |> Maybe.withDefault Point3d.origin
+
+
+{-| Axis from the hit point on the cue ball along the cue
+-}
+cueAxis : Point3d Meters WorldCoordinates -> Angle -> Shot -> Axis3d Meters WorldCoordinates
+cueAxis ballPosition cameraAzimuth { hitRelativeAzimuth, cueElevation, hitElevation } =
+    let
+        hitAzimuth =
+            cameraAzimuth
+                |> Quantity.plus hitRelativeAzimuth
+
+        pointDirection =
+            Direction3d.xyZ hitAzimuth hitElevation
+
+        pointOnCueBall =
+            Point3d.translateIn pointDirection Bodies.ballRadius ballPosition
+
+        axisDirection =
+            Direction3d.xyZ cameraAzimuth cueElevation
+    in
+    Axis3d.through pointOnCueBall axisDirection
+
+
+{-| Check if the cue doesn't overlap with any other objects
+-}
+canShoot : Axis3d Meters WorldCoordinates -> World Id -> Bool
+canShoot axis world =
+    let
+        direction =
+            Axis3d.direction axis
+
+        -- point on the perimeter of the tip of the cue cylinder,
+        -- where the cue is placed at the hit point on the ball
+        pointOnCueEnd =
+            Point3d.translateIn
+                (Direction3d.perpendicularTo direction)
+                Bodies.cueRadius
+                (Axis3d.originPoint axis)
+
+        -- ignore collision with the cue ball
+        worldWithoutCueBall =
+            World.keepIf (\b -> Body.data b /= CueBall) world
+    in
+    -- cast 8 rays along the surface of the cue cylinder
+    List.all
+        (\n ->
+            let
+                rotatedPoint =
+                    pointOnCueEnd
+                        |> Point3d.rotateAround axis (Angle.turns (toFloat n / 8))
+
+                cueRay =
+                    Axis3d.through rotatedPoint direction
+            in
+            case World.raycast cueRay worldWithoutCueBall of
+                Just { point, body } ->
+                    let
+                        collisionPoint =
+                            point |> Point3d.placeIn (Body.frame body)
+                    in
+                    -- if the distance is greater than the cue length + offset, then there is no overlap
+                    rotatedPoint
+                        |> Point3d.distanceFrom collisionPoint
+                        |> Quantity.greaterThan (Quantity.plus Bodies.cueOffset Bodies.cueLength)
+
+                Nothing ->
+                    True
+        )
+        (List.range 0 7)
+
+
 {-| Apply impulse to the cue ball depending on the shooting strength.
 The strength is calculated based on how long the spacebar has been pressed.
 -}
@@ -750,105 +592,8 @@ shootingStrength startTime endTime =
     -(cos (duration / 2000 * pi) / 2) + 0.5
 
 
-placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
-placeBallInHand mouseRay spawnArea world =
-    let
-        -- raise the interection rectangles to vertically align with the center of the ball
-        elevatedWholeTableArea =
-            Bodies.areaBallInHand
-                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
 
-        elevatedSpawnArea =
-            spawnArea
-                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
-    in
-    case Axis3d.intersectionWithRectangle elevatedWholeTableArea mouseRay of
-        Just position ->
-            case Axis3d.intersectionWithRectangle elevatedSpawnArea mouseRay of
-                Just _ ->
-                    let
-                        canPlace =
-                            List.all
-                                (\body ->
-                                    case Body.data body of
-                                        Numbered _ ->
-                                            Point3d.distanceFrom position (Body.originPoint body)
-                                                |> Quantity.greaterThan (Quantity.twice Bodies.ballRadius)
-
-                                        _ ->
-                                            True
-                                )
-                                (World.bodies world)
-                    in
-                    if canPlace then
-                        OnTable CanPlace position
-
-                    else
-                        OnTable CannotPlace position
-
-                Nothing ->
-                    OnTable CannotPlace position
-
-        _ ->
-            OutsideOfTable
-
-
-{-| Get the position of the cue ball from the world
--}
-cueBallPosition : World Id -> Point3d Meters WorldCoordinates
-cueBallPosition world =
-    World.bodies world
-        |> List.filter (\b -> Body.data b == CueBall)
-        |> List.head
-        |> Maybe.map Body.originPoint
-        |> Maybe.withDefault Point3d.origin
-
-
-{-| Find the frozen balls, that are touching the walls
--}
-frozenBalls : World Id -> Set Int
-frozenBalls world =
-    List.foldl
-        (\contact frozen ->
-            let
-                ( b1, b2 ) =
-                    Contact.bodies contact
-            in
-            case ( Body.data b1, Body.data b2 ) of
-                ( Walls, Numbered ball ) ->
-                    Set.insert (EightBall.ballNumber ball) frozen
-
-                ( Numbered ball, Walls ) ->
-                    Set.insert (EightBall.ballNumber ball) frozen
-
-                _ ->
-                    frozen
-        )
-        Set.empty
-        (World.contacts world)
-
-
-{-| Find out if the cue ball is touching the wall.
--}
-frozenCueBall : World Id -> Bool
-frozenCueBall world =
-    List.any
-        (\contact ->
-            let
-                ( b1, b2 ) =
-                    Contact.bodies contact
-            in
-            case ( Body.data b1, Body.data b2 ) of
-                ( Walls, CueBall ) ->
-                    True
-
-                ( CueBall, Walls ) ->
-                    True
-
-                _ ->
-                    False
-        )
-        (World.contacts world)
+-- Simulation
 
 
 ballsStoppedMoving : World Id -> Bool
@@ -958,6 +703,298 @@ simulateWithEvents frame time world events =
 
     else
         ( world, events )
+
+
+{-| Find the frozen balls, that are touching the walls
+-}
+frozenBalls : World Id -> Set Int
+frozenBalls world =
+    List.foldl
+        (\contact frozen ->
+            let
+                ( b1, b2 ) =
+                    Contact.bodies contact
+            in
+            case ( Body.data b1, Body.data b2 ) of
+                ( Walls, Numbered ball ) ->
+                    Set.insert (EightBall.ballNumber ball) frozen
+
+                ( Numbered ball, Walls ) ->
+                    Set.insert (EightBall.ballNumber ball) frozen
+
+                _ ->
+                    frozen
+        )
+        Set.empty
+        (World.contacts world)
+
+
+{-| Find out if the cue ball is touching the wall.
+-}
+frozenCueBall : World Id -> Bool
+frozenCueBall world =
+    List.any
+        (\contact ->
+            let
+                ( b1, b2 ) =
+                    Contact.bodies contact
+            in
+            case ( Body.data b1, Body.data b2 ) of
+                ( Walls, CueBall ) ->
+                    True
+
+                ( CueBall, Walls ) ->
+                    True
+
+                _ ->
+                    False
+        )
+        (World.contacts world)
+
+
+
+-- VIEW
+
+
+view : Dict Int (Texture Color) -> Texture Float -> Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg
+view ballTextures roughnessTexture window model =
+    let
+        sunlight =
+            Scene3d.Light.directional (Scene3d.Light.castsShadows True)
+                { direction = Direction3d.xyZ (Angle.degrees 135) (Angle.degrees -60)
+                , intensity = Illuminance.lux 10000
+                , chromaticity = Scene3d.Light.daylight
+                }
+
+        environmentalLighting =
+            Scene3d.Light.soft
+                { upDirection = Direction3d.positiveZ
+                , chromaticity = Scene3d.Light.daylight
+                , intensityAbove = Illuminance.lux 3000
+                , intensityBelow = Illuminance.lux 0
+                }
+
+        camera3d =
+            Camera.camera3d model.camera
+
+        entities =
+            List.map
+                (Bodies.bodyToEntity roughnessTexture ballTextures)
+                (World.bodies model.world)
+
+        dimensions =
+            window
+                |> Rectangle2d.dimensions
+                |> Tuple.mapBoth Quantity.round Quantity.round
+
+        entitiesWithUI =
+            case model.state of
+                PlacingBall (OnTable spawn position) poolWithBallInHand ->
+                    let
+                        highlightAreaEntity =
+                            case poolWithBallInHand of
+                                BehindHeadString _ ->
+                                    Bodies.areaBehindTheHeadStringEntity
+
+                                Anywhere _ ->
+                                    Scene3d.nothing
+
+                        cueBallEntity =
+                            Bodies.cueBallEntity (spawn == CanPlace)
+                                |> Scene3d.placeIn (Frame3d.atPoint position)
+                    in
+                    cueBallEntity :: highlightAreaEntity :: entities
+
+                PlacingBall OutsideOfTable (BehindHeadString _) ->
+                    Bodies.areaBehindTheHeadStringEntity :: entities
+
+                Shooting _ cue _ ->
+                    let
+                        axis =
+                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
+
+                        isActive =
+                            canShoot axis model.world
+                    in
+                    Bodies.cueEntity camera3d axis isActive :: entities
+
+                _ ->
+                    entities
+    in
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" "0"
+        , Html.Attributes.style "top" "0"
+        , Html.Attributes.style "cursor" (currentCursor model.state)
+        , Html.Events.preventDefaultOn "wheel"
+            (Json.Decode.map
+                (\deltaY -> ( MouseWheel deltaY, True ))
+                (Json.Decode.field "deltaY" Json.Decode.float)
+            )
+        ]
+        [ Scene3d.custom
+            { dimensions = dimensions
+            , antialiasing = Scene3d.noAntialiasing
+            , camera = camera3d
+            , entities = entitiesWithUI
+            , lights = Scene3d.twoLights environmentalLighting sunlight
+            , exposure = Scene3d.exposureValue 13
+            , whiteBalance = Scene3d.Light.daylight
+            , clipDepth = Bodies.clipDepth
+            , background = Scene3d.backgroundColor Color.black
+            , toneMapping = Scene3d.noToneMapping
+            }
+        , viewShootingStrength window model
+        ]
+
+
+viewShootingStrength : Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg
+viewShootingStrength window { state, time } =
+    case state of
+        Shooting _ { shootPressedAt } _ ->
+            case shootPressedAt of
+                Nothing ->
+                    Html.text ""
+
+                Just startTime ->
+                    let
+                        progressHeight =
+                            shootingStrength startTime time * (barHeight - 4)
+
+                        height =
+                            window
+                                |> Rectangle2d.dimensions
+                                |> Tuple.second
+                                |> Pixels.inPixels
+
+                        barHeight =
+                            height * 0.6
+
+                        barBottom =
+                            (height - barHeight) / 2
+                    in
+                    Html.div []
+                        [ Html.div
+                            [ Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style "right" "50px"
+                            , Html.Attributes.style "bottom" (String.fromFloat barBottom ++ "px")
+                            , Html.Attributes.style "width" "40px"
+                            , Html.Attributes.style "height" (String.fromFloat barHeight ++ "px")
+                            , Html.Attributes.style "border" "2px solid #fff"
+                            , Html.Attributes.style "border-radius" "10px"
+                            ]
+                            []
+                        , Html.div
+                            [ Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style "right" "54px"
+                            , Html.Attributes.style "bottom" (String.fromFloat (barBottom + 4) ++ "px")
+                            , Html.Attributes.style "width" "36px"
+                            , Html.Attributes.style "background" "#fff"
+                            , Html.Attributes.style "border-radius" "6px"
+                            , Html.Attributes.style "height" (String.fromFloat progressHeight ++ "px")
+                            ]
+                            []
+                        ]
+
+        _ ->
+            Html.text ""
+
+
+currentCursor : State -> String
+currentCursor state =
+    case state of
+        PlacingBall (OnTable _ _) _ ->
+            "none"
+
+        Shooting (TargetingCueBall _) _ _ ->
+            "pointer"
+
+        Shooting (ElevatingCue _) _ _ ->
+            "ns-resize"
+
+        Simulating _ _ ->
+            "wait"
+
+        _ ->
+            "default"
+
+
+currentPlayer : State -> String
+currentPlayer state =
+    let
+        currentPlayer_ =
+            case state of
+                PlacingBall _ (BehindHeadString pool) ->
+                    EightBall.currentPlayer pool
+
+                Shooting _ _ pool ->
+                    EightBall.currentPlayer pool
+
+                Simulating _ pool ->
+                    EightBall.currentPlayer pool
+
+                PlacingBall _ (Anywhere pool) ->
+                    EightBall.currentPlayer pool
+
+                GameOver winner _ ->
+                    winner
+    in
+    case currentPlayer_ of
+        EightBall.Player1 ->
+            "Player 1"
+
+        EightBall.Player2 ->
+            "Player 2"
+
+
+currentTarget : State -> String
+currentTarget state =
+    let
+        currentTarget_ =
+            case state of
+                PlacingBall _ (BehindHeadString pool) ->
+                    EightBall.currentTarget pool
+
+                Shooting _ _ pool ->
+                    EightBall.currentTarget pool
+
+                Simulating _ pool ->
+                    EightBall.currentTarget pool
+
+                PlacingBall _ (Anywhere pool) ->
+                    EightBall.currentTarget pool
+
+                GameOver _ pool ->
+                    EightBall.currentTarget pool
+    in
+    case currentTarget_ of
+        EightBall.OpenTable ->
+            "Open Table"
+
+        EightBall.Solids ->
+            "Solids"
+
+        EightBall.Stripes ->
+            "Stripes"
+
+        EightBall.EightBall ->
+            "8-Ball"
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.batch
+        [ Browser.Events.onKeyDown (decodeKey ShootPressed)
+        , Browser.Events.onKeyUp (decodeKey ShootReleased)
+        , Browser.Events.onAnimationFrame Tick
+        , Browser.Events.onMouseDown (decodeMouse MouseDown)
+        , Browser.Events.onMouseMove (decodeMouse MouseMove)
+        , Browser.Events.onMouseUp (Json.Decode.succeed MouseUp)
+        ]
 
 
 decodeMouse : (Point2d Pixels ScreenCoordinates -> Msg) -> Json.Decode.Decoder Msg
