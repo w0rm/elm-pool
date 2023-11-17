@@ -29,7 +29,7 @@ import Illuminance
 import Json.Decode
 import Length exposing (Meters)
 import List
-import Physics.Body as Body
+import Physics.Body as Body exposing (Body)
 import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
@@ -356,7 +356,7 @@ preUpdate msg model =
 
 
 
--- Ball in hand
+-- Placing ball in hand
 
 
 placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
@@ -375,31 +375,38 @@ placeBallInHand mouseRay spawnArea world =
         Just position ->
             case Axis3d.intersectionWithRectangle elevatedSpawnArea mouseRay of
                 Just _ ->
-                    let
-                        canPlace =
-                            List.all
-                                (\body ->
-                                    case Body.data body of
-                                        Numbered _ ->
-                                            Point3d.distanceFrom position (Body.originPoint body)
-                                                |> Quantity.greaterThan (Quantity.twice Bodies.ballRadius)
-
-                                        _ ->
-                                            True
-                                )
-                                (World.bodies world)
-                    in
-                    if canPlace then
-                        OnTable CanPlace position
-
-                    else
-                        OnTable CannotPlace position
+                    placeBallInHandHelp (World.bodies world) position
 
                 Nothing ->
                     OnTable CannotPlace position
 
         _ ->
             OutsideOfTable
+
+
+{-| Check if overlaps with any of the numbered balls
+-}
+placeBallInHandHelp : List (Body Id) -> Point3d Meters WorldCoordinates -> BallInHand
+placeBallInHandHelp bodies position =
+    case bodies of
+        body :: remaining ->
+            case Body.data body of
+                Numbered _ ->
+                    if
+                        Body.originPoint body
+                            |> Point3d.distanceFrom position
+                            |> Quantity.lessThan (Quantity.twice Bodies.ballRadius)
+                    then
+                        OnTable CannotPlace position
+
+                    else
+                        placeBallInHandHelp remaining position
+
+                _ ->
+                    placeBallInHandHelp remaining position
+
+        [] ->
+            OnTable CanPlace position
 
 
 
