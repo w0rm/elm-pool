@@ -58,17 +58,19 @@ type ScreenCoordinates
 
 
 type alias Model =
-    { world : World Id
+    { time : Posix
+    , world : World Id
+    , state : State
+
+    -- Resources only used in rendering:
     , ballTextures : Dict Int (Texture Color)
     , roughnessTexture : Texture Float
     , window : Rectangle2d Pixels ScreenCoordinates
-    , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
-    , state : State
-    , time : Posix
 
-    -- Animated camera properties:
-    , zoom : Timeline Float
-    , azimuth : Timeline Angle
+    -- Camera properties:
+    , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
+    , zoom : Timeline Float -- also used in orbiting precision
+    , azimuth : Angle -- also used for aiming the cue
     , elevation : Timeline Angle
     , focalPoint : Timeline (Point3d Meters WorldCoordinates)
     }
@@ -145,7 +147,7 @@ initial ballTextures roughnessTexture window =
     , time = time
     , window = window
     , zoom = Animator.init 0.9
-    , azimuth = Animator.init (Angle.degrees -25)
+    , azimuth = Angle.degrees -25
     , elevation = Animator.init (Angle.degrees 30)
     , focalPoint = Animator.init Point3d.origin
     , orbiting = Nothing
@@ -165,7 +167,7 @@ camera { azimuth, elevation, zoom, focalPoint } =
             Viewpoint3d.orbit
                 { focalPoint = pointFromTimeline focalPoint
                 , groundPlane = SketchPlane3d.xy
-                , azimuth = angleFromTimeline azimuth
+                , azimuth = azimuth
                 , elevation = angleFromTimeline elevation
                 , distance = distance
                 }
@@ -267,12 +269,9 @@ view ({ world, ballTextures, roughnessTexture, window } as model) =
 
 {-| Axis from the hit point on the cue ball along the cue
 -}
-cueAxis : Point3d Meters WorldCoordinates -> Timeline Angle -> Shot -> Axis3d Meters WorldCoordinates
-cueAxis ballPosition cameraAzimuthTimeline { hitRelativeAzimuth, cueElevation, hitElevation } =
+cueAxis : Point3d Meters WorldCoordinates -> Angle -> Shot -> Axis3d Meters WorldCoordinates
+cueAxis ballPosition cameraAzimuth { hitRelativeAzimuth, cueElevation, hitElevation } =
     let
-        cameraAzimuth =
-            angleFromTimeline cameraAzimuthTimeline
-
         hitAzimuth =
             cameraAzimuth
                 |> Quantity.plus hitRelativeAzimuth
@@ -483,27 +482,6 @@ subscriptions _ =
         ]
 
 
-ballsStoppedMoving : World Id -> Bool
-ballsStoppedMoving world =
-    List.all
-        (\body ->
-            case Body.data body of
-                CueBall ->
-                    Body.velocity body
-                        |> Vector3d.length
-                        |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
-
-                Numbered _ ->
-                    Body.velocity body
-                        |> Vector3d.length
-                        |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
-
-                _ ->
-                    True
-        )
-        (World.bodies world)
-
-
 update : Msg -> Model -> Model
 update msg model =
     case msg of
@@ -513,7 +491,6 @@ update msg model =
                 newModel =
                     { model
                         | time = time
-                        , azimuth = Animator.updateTimeline time model.azimuth
                         , elevation = Animator.updateTimeline time model.elevation
                         , zoom = Animator.updateTimeline time model.zoom
                         , focalPoint = Animator.updateTimeline time model.focalPoint
@@ -728,8 +705,8 @@ update msg model =
                     model
 
 
-hoverCueBall : Axis3d Meters WorldCoordinates -> World Id -> Timeline Angle -> AimingCue
-hoverCueBall mouseRay world azimuthTimeline =
+hoverCueBall : Axis3d Meters WorldCoordinates -> World Id -> Angle -> AimingCue
+hoverCueBall mouseRay world azimuth =
     case World.raycast mouseRay world of
         Just { body, normal } ->
             let
@@ -744,9 +721,6 @@ hoverCueBall mouseRay world azimuthTimeline =
 
                 hitElevation =
                     Direction3d.elevationFrom SketchPlane3d.xy hitNormal
-
-                azimuth =
-                    angleFromTimeline azimuthTimeline
 
                 hitRelativeAzimuth =
                     hitAzimuth
@@ -782,7 +756,7 @@ mouseOrbiting originalPosition newPosition model =
             orbitingPrecision model.zoom
 
         newAzimuth =
-            angleFromTimeline model.azimuth
+            model.azimuth
                 |> Quantity.minus (Quantity.at radiansInPixels deltaX)
                 |> Angle.normalize
 
@@ -793,7 +767,7 @@ mouseOrbiting originalPosition newPosition model =
     in
     { model
         | orbiting = Just newPosition
-        , azimuth = Animator.go Animator.immediately newAzimuth model.azimuth
+        , azimuth = newAzimuth
         , elevation = Animator.go Animator.immediately newElevation model.elevation
     }
 
@@ -964,6 +938,17 @@ frozenCueBall world =
                     False
         )
         (World.contacts world)
+
+
+ballsStoppedMoving : World Id -> Bool
+ballsStoppedMoving world =
+    List.all
+        (\body ->
+            Body.velocity body
+                |> Vector3d.length
+                |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
+        )
+        (World.bodies world)
 
 
 {-| Simulate multiple frames and collect the game events
