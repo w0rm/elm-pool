@@ -29,7 +29,7 @@ import Illuminance
 import Json.Decode
 import Length exposing (Meters)
 import List
-import Physics.Body as Body
+import Physics.Body as Body exposing (Body)
 import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
 import Physics.World as World exposing (World)
@@ -201,10 +201,10 @@ update window msg oldModel =
                 mouseRay =
                     Camera.ray model.camera window mousePosition
 
-                newMouse =
+                hitTarget =
                     targetCueBall mouseRay model.world (Camera.azimuth model.camera)
             in
-            { model | state = Shooting newMouse shot pool }
+            { model | state = Shooting (TargetingCueBall hitTarget) shot pool }
 
         -- Mouse down on the hit target applies it to the next shot to be made
         ( Shooting (TargetingCueBall (Just hitTarget)) shot pool, MouseDown mousePosition ) ->
@@ -215,47 +215,47 @@ update window msg oldModel =
             { model | state = Shooting (ElevatingCue mousePosition) newShot pool }
 
         -- Change the cue elevation by moving the mouse with the button pressed
-        ( Shooting (ElevatingCue originalPosition) cue pool, MouseMove mousePosition ) ->
+        ( Shooting (ElevatingCue originalPosition) shot pool, MouseMove mousePosition ) ->
             let
                 newElevation =
-                    elevateCue originalPosition mousePosition model.camera cue.cueElevation
+                    elevateCue originalPosition mousePosition model.camera shot.cueElevation
 
-                newCue =
-                    { cue | cueElevation = newElevation }
+                newShot =
+                    { shot | cueElevation = newElevation }
             in
-            { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
+            { model | state = Shooting (ElevatingCue mousePosition) newShot pool }
 
         -- Releasing the mouse button stops elevating the cue
-        ( Shooting (ElevatingCue _) cue pool, MouseUp ) ->
-            { model | state = Shooting (TargetingCueBall Nothing) cue pool }
+        ( Shooting (ElevatingCue _) shot pool, MouseUp ) ->
+            { model | state = Shooting (TargetingCueBall Nothing) shot pool }
 
         -- Holding the shoot button down allows to select the force
-        ( Shooting mouse cue pool, ShootPressed ) ->
+        ( Shooting aimingCue shot pool, ShootPressed ) ->
             let
                 axis =
-                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
+                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) shot
             in
             -- the message can be sent many times
             -- we need to check if the button isn't already pressed
-            if canShoot axis model.world && cue.shootPressedAt == Nothing then
+            if canShoot axis model.world && shot.shootPressedAt == Nothing then
                 let
                     -- save the time the buttom was pressed
-                    newCue =
-                        { cue | shootPressedAt = Just model.time }
+                    newShot =
+                        { shot | shootPressedAt = Just model.time }
                 in
-                { model | state = Shooting mouse newCue pool }
+                { model | state = Shooting aimingCue newShot pool }
 
             else
                 model
 
         -- Releasing the button shoots the ball!
-        ( Shooting mouse cue pool, ShootReleased ) ->
+        ( Shooting aimingCue shot pool, ShootReleased ) ->
             let
                 axis =
-                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
+                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) shot
 
                 startTime =
-                    Maybe.withDefault model.time cue.shootPressedAt
+                    Maybe.withDefault model.time shot.shootPressedAt
             in
             if canShoot axis model.world then
                 { model
@@ -265,7 +265,7 @@ update window msg oldModel =
                 }
 
             else
-                { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
+                { model | state = Shooting aimingCue { shot | shootPressedAt = Nothing } pool }
 
         -- Simulate the physics!
         ( Simulating events pool, Tick time ) ->
@@ -356,7 +356,7 @@ preUpdate msg model =
 
 
 
--- Ball in hand
+-- Placing ball in hand
 
 
 placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
@@ -375,25 +375,7 @@ placeBallInHand mouseRay spawnArea world =
         Just position ->
             case Axis3d.intersectionWithRectangle elevatedSpawnArea mouseRay of
                 Just _ ->
-                    let
-                        canPlace =
-                            List.all
-                                (\body ->
-                                    case Body.data body of
-                                        Numbered _ ->
-                                            Point3d.distanceFrom position (Body.originPoint body)
-                                                |> Quantity.greaterThan (Quantity.twice Bodies.ballRadius)
-
-                                        _ ->
-                                            True
-                                )
-                                (World.bodies world)
-                    in
-                    if canPlace then
-                        OnTable CanPlace position
-
-                    else
-                        OnTable CannotPlace position
+                    placeBallInHandHelp (World.bodies world) position
 
                 Nothing ->
                     OnTable CannotPlace position
@@ -402,13 +384,38 @@ placeBallInHand mouseRay spawnArea world =
             OutsideOfTable
 
 
+{-| Check if overlaps with any of the numbered balls
+-}
+placeBallInHandHelp : List (Body Id) -> Point3d Meters WorldCoordinates -> BallInHand
+placeBallInHandHelp bodies position =
+    case bodies of
+        body :: remaining ->
+            case Body.data body of
+                Numbered _ ->
+                    if
+                        Body.originPoint body
+                            |> Point3d.distanceFrom position
+                            |> Quantity.lessThan (Quantity.twice Bodies.ballRadius)
+                    then
+                        OnTable CannotPlace position
+
+                    else
+                        placeBallInHandHelp remaining position
+
+                _ ->
+                    placeBallInHandHelp remaining position
+
+        [] ->
+            OnTable CanPlace position
+
+
 
 -- Aiming cue
 
 
 {-| Pick a point on the cue ball to hit
 -}
-targetCueBall : Axis3d Meters WorldCoordinates -> World Id -> Angle -> AimingCue
+targetCueBall : Axis3d Meters WorldCoordinates -> World Id -> Angle -> Maybe HitTarget
 targetCueBall mouseRay world azimuth =
     case World.raycast mouseRay world of
         Just { body, normal } ->
@@ -435,18 +442,16 @@ targetCueBall mouseRay world azimuth =
                     Quantity.lessThan (Angle.degrees 90) (Quantity.abs hitRelativeAzimuth)
             in
             if Body.data body == CueBall && hoveringFrontHemisphere then
-                TargetingCueBall
-                    (Just
-                        { relativeAzimuth = hitRelativeAzimuth
-                        , elevation = hitElevation
-                        }
-                    )
+                Just
+                    { relativeAzimuth = hitRelativeAzimuth
+                    , elevation = hitElevation
+                    }
 
             else
-                TargetingCueBall Nothing
+                Nothing
 
         Nothing ->
-            TargetingCueBall Nothing
+            Nothing
 
 
 {-| Calculate the new cue elevation using the exising elevation and the mouse y offset.
