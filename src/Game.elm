@@ -86,17 +86,22 @@ type PoolWithBallInHand
 
 
 type AimingCue
-    = TargetingCueBall (Maybe { hitRelativeAzimuth : Angle, hitElevation : Angle })
+    = TargetingCueBall (Maybe HitTarget)
     | ElevatingCue (Point2d Pixels ScreenCoordinates)
 
 
 type alias Shot =
     { cueElevation : Angle
     , shootPressedAt : Maybe Posix
+    , hitTarget : HitTarget
+    }
 
-    -- polar coordinates of the hit point on the surface of the cue ball
-    , hitRelativeAzimuth : Angle -- relative to the camera azimuth
-    , hitElevation : Angle
+
+{-| Polar coordinates of the hit point on the surface of the cue ball
+-}
+type alias HitTarget =
+    { relativeAzimuth : Angle -- relative to the camera azimuth
+    , elevation : Angle
     }
 
 
@@ -104,8 +109,7 @@ initialShot : Shot
 initialShot =
     { cueElevation = Angle.degrees 5
     , shootPressedAt = Nothing
-    , hitRelativeAzimuth = Angle.degrees 0
-    , hitElevation = Angle.degrees 0
+    , hitTarget = HitTarget (Angle.degrees 0) (Angle.degrees 0) -- aim at the center by default
     }
 
 
@@ -198,13 +202,10 @@ update window msg oldModel =
             in
             { model | state = Shooting newMouse cue pool }
 
-        ( Shooting (TargetingCueBall (Just target)) cue pool, MouseDown mousePosition ) ->
+        ( Shooting (TargetingCueBall (Just hitTarget)) cue pool, MouseDown mousePosition ) ->
             let
                 newCue =
-                    { cue
-                        | hitRelativeAzimuth = target.hitRelativeAzimuth
-                        , hitElevation = target.hitElevation
-                    }
+                    { cue | hitTarget = hitTarget }
             in
             { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
 
@@ -424,8 +425,8 @@ targetCueBall mouseRay world azimuth =
             if Body.data body == CueBall && hoveringFrontHemisphere then
                 TargetingCueBall
                     (Just
-                        { hitRelativeAzimuth = hitRelativeAzimuth
-                        , hitElevation = hitElevation
+                        { relativeAzimuth = hitRelativeAzimuth
+                        , elevation = hitElevation
                         }
                     )
 
@@ -476,14 +477,14 @@ cueBallPosition world =
 {-| Axis from the hit point on the cue ball along the cue
 -}
 cueAxis : Point3d Meters WorldCoordinates -> Angle -> Shot -> Axis3d Meters WorldCoordinates
-cueAxis ballPosition cameraAzimuth { hitRelativeAzimuth, cueElevation, hitElevation } =
+cueAxis ballPosition cameraAzimuth { hitTarget, cueElevation } =
     let
         hitAzimuth =
             cameraAzimuth
-                |> Quantity.plus hitRelativeAzimuth
+                |> Quantity.plus hitTarget.relativeAzimuth
 
         pointDirection =
-            Direction3d.xyZ hitAzimuth hitElevation
+            Direction3d.xyZ hitAzimuth hitTarget.elevation
 
         pointOnCueBall =
             Point3d.translateIn pointDirection Bodies.ballRadius ballPosition
