@@ -76,7 +76,7 @@ type alias Model =
 
 type State
     = PlacingBall BallInHand PoolWithBallInHand
-    | Playing PlayingMouse Cue (Pool EightBall.AwaitingPlayerShot)
+    | Shooting AimingCue Shot (Pool EightBall.AwaitingPlayerShot)
     | Simulating (List ( Posix, ShotEvent )) (Pool EightBall.AwaitingPlayerShot)
     | GameOver Player (Pool EightBall.AwaitingStart)
 
@@ -86,8 +86,8 @@ type PoolWithBallInHand
     | Anywhere (Pool EightBall.AwaitingPlaceBallInHand)
 
 
-type alias Cue =
-    { elevation : Angle
+type alias Shot =
+    { cueElevation : Angle
     , shootPressedAt : Maybe Posix
 
     -- polar coordinates of the hit point on the surface of the cue ball
@@ -96,17 +96,17 @@ type alias Cue =
     }
 
 
-initialCue : Cue
-initialCue =
-    { elevation = Angle.degrees 5
+initialShot : Shot
+initialShot =
+    { cueElevation = Angle.degrees 5
     , shootPressedAt = Nothing
     , hitRelativeAzimuth = Angle.degrees 0
     , hitElevation = Angle.degrees 0
     }
 
 
-type PlayingMouse
-    = HoveringCueBall { hitRelativeAzimuth : Angle, hitElevation : Angle }
+type AimingCue
+    = TargetingCueBall { hitRelativeAzimuth : Angle, hitElevation : Angle }
     | ElevatingCue (Point2d Pixels ScreenCoordinates)
     | OutsideOfCueBall
 
@@ -225,7 +225,7 @@ view ({ world, ballTextures, roughnessTexture, window } as model) =
                 PlacingBall OutsideOfTable (BehindHeadString _) ->
                     Bodies.areaBehindTheHeadStringEntity :: entities
 
-                Playing _ cue _ ->
+                Shooting _ cue _ ->
                     let
                         axis =
                             cueAxis (cueBallPosition model.world) model.azimuth cue
@@ -267,8 +267,8 @@ view ({ world, ballTextures, roughnessTexture, window } as model) =
 
 {-| Axis from the hit point on the cue ball along the cue
 -}
-cueAxis : Point3d Meters WorldCoordinates -> Timeline Angle -> Cue -> Axis3d Meters WorldCoordinates
-cueAxis ballPosition cameraAzimuthTimeline { hitRelativeAzimuth, elevation, hitElevation } =
+cueAxis : Point3d Meters WorldCoordinates -> Timeline Angle -> Shot -> Axis3d Meters WorldCoordinates
+cueAxis ballPosition cameraAzimuthTimeline { hitRelativeAzimuth, cueElevation, hitElevation } =
     let
         cameraAzimuth =
             angleFromTimeline cameraAzimuthTimeline
@@ -284,7 +284,7 @@ cueAxis ballPosition cameraAzimuthTimeline { hitRelativeAzimuth, elevation, hitE
             Point3d.translateIn pointDirection Bodies.ballRadius ballPosition
 
         axisDirection =
-            Direction3d.xyZ cameraAzimuth elevation
+            Direction3d.xyZ cameraAzimuth cueElevation
     in
     Axis3d.through pointOnCueBall axisDirection
 
@@ -340,7 +340,7 @@ canShoot axis world =
 viewShootingStrength : Model -> Html Msg
 viewShootingStrength { state, time, window } =
     case state of
-        Playing _ { shootPressedAt } _ ->
+        Shooting _ { shootPressedAt } _ ->
             case shootPressedAt of
                 Nothing ->
                     Html.text ""
@@ -395,10 +395,10 @@ currentCursor state =
         PlacingBall (OnTable _ _) _ ->
             "none"
 
-        Playing (HoveringCueBall _) _ _ ->
+        Shooting (TargetingCueBall _) _ _ ->
             "pointer"
 
-        Playing (ElevatingCue _) _ _ ->
+        Shooting (ElevatingCue _) _ _ ->
             "ns-resize"
 
         Simulating _ _ ->
@@ -416,7 +416,7 @@ currentPlayer state =
                 PlacingBall _ (BehindHeadString pool) ->
                     EightBall.currentPlayer pool
 
-                Playing _ _ pool ->
+                Shooting _ _ pool ->
                     EightBall.currentPlayer pool
 
                 Simulating _ pool ->
@@ -444,7 +444,7 @@ currentTarget state =
                 PlacingBall _ (BehindHeadString pool) ->
                     EightBall.currentTarget pool
 
-                Playing _ _ pool ->
+                Shooting _ _ pool ->
                     EightBall.currentTarget pool
 
                 Simulating _ pool ->
@@ -543,7 +543,7 @@ update msg model =
                                         cueBallPosition newModel.world
                                 in
                                 { newModel
-                                    | state = Playing OutsideOfCueBall initialCue newPool
+                                    | state = Shooting OutsideOfCueBall initialShot newPool
                                     , focalPoint = Animator.go Animator.quickly newFocalPoint newModel.focalPoint
                                 }
 
@@ -598,7 +598,7 @@ update msg model =
                                     EightBall.placeBallInHand model.time pool
                     in
                     { model
-                        | state = Playing OutsideOfCueBall initialCue newPool
+                        | state = Shooting OutsideOfCueBall initialShot newPool
                         , world = World.add (Body.moveTo position Bodies.cueBall) model.world
                         , focalPoint = Animator.go Animator.quickly position model.focalPoint
                     }
@@ -608,7 +608,7 @@ update msg model =
                 PlacingBall (OnTable CannotPlace _) _ ->
                     model
 
-                Playing (HoveringCueBall { hitRelativeAzimuth, hitElevation }) cue pool ->
+                Shooting (TargetingCueBall { hitRelativeAzimuth, hitElevation }) cue pool ->
                     let
                         newCue =
                             { cue
@@ -616,7 +616,7 @@ update msg model =
                                 , hitElevation = hitElevation
                             }
                     in
-                    { model | state = Playing (ElevatingCue mousePosition) newCue pool }
+                    { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
 
                 _ ->
                     { model | orbiting = Just mousePosition }
@@ -648,17 +648,17 @@ update msg model =
                             in
                             { model | state = PlacingBall newBallInHand pool }
 
-                        Playing (ElevatingCue originalPosition) cue pool ->
+                        Shooting (ElevatingCue originalPosition) cue pool ->
                             let
                                 newElevation =
-                                    cueElevation originalPosition mousePosition model.zoom cue.elevation
+                                    elevateCue originalPosition mousePosition model.zoom cue.cueElevation
 
                                 newCue =
-                                    { cue | elevation = newElevation }
+                                    { cue | cueElevation = newElevation }
                             in
-                            { model | state = Playing (ElevatingCue mousePosition) newCue pool }
+                            { model | state = Shooting (ElevatingCue mousePosition) newCue pool }
 
-                        Playing _ cue pool ->
+                        Shooting _ cue pool ->
                             let
                                 mouseRay =
                                     Camera3d.ray (camera model) model.window mousePosition
@@ -666,16 +666,16 @@ update msg model =
                                 newMouse =
                                     hoverCueBall mouseRay model.world model.azimuth
                             in
-                            { model | state = Playing newMouse cue pool }
+                            { model | state = Shooting newMouse cue pool }
 
                         _ ->
                             model
 
         MouseUp ->
             case model.state of
-                Playing _ cue pool ->
+                Shooting _ cue pool ->
                     { model
-                        | state = Playing OutsideOfCueBall cue pool
+                        | state = Shooting OutsideOfCueBall cue pool
                         , orbiting = Nothing
                     }
 
@@ -684,7 +684,7 @@ update msg model =
 
         ShootPressed ->
             case model.state of
-                Playing mouse cue pool ->
+                Shooting mouse cue pool ->
                     let
                         axis =
                             cueAxis (cueBallPosition model.world) model.azimuth cue
@@ -697,7 +697,7 @@ update msg model =
                             newCue =
                                 { cue | shootPressedAt = Just model.time }
                         in
-                        { model | state = Playing mouse newCue pool }
+                        { model | state = Shooting mouse newCue pool }
 
                     else
                         model
@@ -707,7 +707,7 @@ update msg model =
 
         ShootReleased ->
             case model.state of
-                Playing mouse cue pool ->
+                Shooting mouse cue pool ->
                     let
                         axis =
                             cueAxis (cueBallPosition model.world) model.azimuth cue
@@ -722,13 +722,13 @@ update msg model =
                             }
 
                         _ ->
-                            { model | state = Playing mouse { cue | shootPressedAt = Nothing } pool }
+                            { model | state = Shooting mouse { cue | shootPressedAt = Nothing } pool }
 
                 _ ->
                     model
 
 
-hoverCueBall : Axis3d Meters WorldCoordinates -> World Id -> Timeline Angle -> PlayingMouse
+hoverCueBall : Axis3d Meters WorldCoordinates -> World Id -> Timeline Angle -> AimingCue
 hoverCueBall mouseRay world azimuthTimeline =
     case World.raycast mouseRay world of
         Just { body, normal } ->
@@ -758,7 +758,7 @@ hoverCueBall mouseRay world azimuthTimeline =
                     Quantity.lessThan (Angle.degrees 90) (Quantity.abs hitRelativeAzimuth)
             in
             if Body.data body == CueBall && hoveringFrontHemisphere then
-                HoveringCueBall
+                TargetingCueBall
                     { hitRelativeAzimuth = hitRelativeAzimuth
                     , hitElevation = hitElevation
                     }
@@ -803,8 +803,8 @@ mouseOrbiting originalPosition newPosition model =
 The precision depends on the zoom level.
 
 -}
-cueElevation : Point2d Pixels ScreenCoordinates -> Point2d Pixels ScreenCoordinates -> Timeline Float -> Angle -> Angle
-cueElevation originalPosition newPosition zoomTimeline elevation =
+elevateCue : Point2d Pixels ScreenCoordinates -> Point2d Pixels ScreenCoordinates -> Timeline Float -> Angle -> Angle
+elevateCue originalPosition newPosition zoomTimeline elevation =
     let
         radiansInPixels =
             orbitingPrecision zoomTimeline

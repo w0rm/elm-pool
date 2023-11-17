@@ -138,8 +138,7 @@ viewCurrentStatus gameModel assetsPath =
         ]
         [ Html.node "style"
             []
-            [ Html.text (fontStyle assetsPath)
-            ]
+            [ Html.text (fontStyle assetsPath) ]
         , case gameModel.state of
             Game.GameOver _ _ ->
                 viewGameOver gameModel
