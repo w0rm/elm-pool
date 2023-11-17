@@ -2,6 +2,8 @@ module Main exposing (main)
 
 import Browser
 import Browser.Dom
+import Browser.Events
+import Camera exposing (ScreenCoordinates)
 import Color exposing (Color)
 import Dict exposing (Dict)
 import Game
@@ -19,12 +21,12 @@ import WebGL.Texture exposing (defaultOptions)
 
 type Model
     = Loading LoadingModel
-    | Running String Game.Model
+    | Loaded LoadedModel
     | Failed String
 
 
 type Msg
-    = GotInitialViewport Browser.Dom.Viewport
+    = WindowResized (Rectangle2d Pixels ScreenCoordinates)
     | GotBallTexture Int (Result WebGL.Texture.Error (Material.Texture Color))
     | GotRoughnessTexture (Result WebGL.Texture.Error (Material.Texture Float))
     | RunningMsg Game.Msg
@@ -34,8 +36,17 @@ type Msg
 type alias LoadingModel =
     { ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Maybe (Material.Texture Float)
-    , window : Maybe (Rectangle2d Pixels Game.ScreenCoordinates)
+    , window : Maybe (Rectangle2d Pixels ScreenCoordinates)
     , assetsPath : String
+    }
+
+
+type alias LoadedModel =
+    { ballTextures : Dict Int (Material.Texture Color)
+    , roughnessTexture : Material.Texture Float
+    , window : Rectangle2d Pixels ScreenCoordinates
+    , assetsPath : String
+    , game : Game.Model
     }
 
 
@@ -46,12 +57,25 @@ main =
         , update = \msg model -> ( update msg model, Cmd.none )
         , subscriptions =
             \model ->
-                case model of
-                    Running _ m ->
-                        Sub.map RunningMsg (Game.subscriptions m)
+                Sub.batch
+                    [ Browser.Events.onResize
+                        (\width height ->
+                            WindowResized
+                                (Rectangle2d.with
+                                    { x1 = Pixels.pixels 0
+                                    , y1 = Pixels.float (toFloat height)
+                                    , x2 = Pixels.float (toFloat width)
+                                    , y2 = Pixels.pixels 0
+                                    }
+                                )
+                        )
+                    , case model of
+                        Loaded m ->
+                            Sub.map RunningMsg (Game.subscriptions m.game)
 
-                    _ ->
-                        Sub.none
+                        _ ->
+                            Sub.none
+                    ]
         , view = view
         }
 
@@ -102,7 +126,18 @@ init unsafeFlags =
                 (List.range 1 15)
             )
         , Task.attempt GotRoughnessTexture (Material.load (assetsPath ++ "img/roughness.jpg"))
-        , Task.perform GotInitialViewport Browser.Dom.getViewport
+        , Task.perform
+            (\{ viewport } ->
+                WindowResized
+                    (Rectangle2d.with
+                        { x1 = Pixels.pixels 0
+                        , y1 = Pixels.pixels viewport.height
+                        , x2 = Pixels.pixels viewport.width
+                        , y2 = Pixels.pixels 0
+                        }
+                    )
+            )
+            Browser.Dom.getViewport
         ]
     )
 
@@ -110,12 +145,12 @@ init unsafeFlags =
 view : Model -> Html Msg
 view model =
     case model of
-        Running assetsPath gameModel ->
+        Loaded { game, roughnessTexture, ballTextures, window, assetsPath } ->
             Html.div
                 []
-                [ Html.map RunningMsg (Game.view gameModel)
-                , viewCurrentStatus gameModel
-                    assetsPath
+                [ Html.map RunningMsg
+                    (Game.view ballTextures roughnessTexture window game)
+                , viewCurrentStatus game assetsPath
                 ]
 
         Loading _ ->
@@ -217,19 +252,11 @@ fontStyle path =
 update : Msg -> Model -> Model
 update msg model =
     case ( msg, model ) of
-        ( GotInitialViewport { viewport }, Loading loadingModel ) ->
-            loadComplete
-                { loadingModel
-                    | window =
-                        Just
-                            (Rectangle2d.with
-                                { x1 = Pixels.pixels 0
-                                , y1 = Pixels.pixels viewport.height
-                                , x2 = Pixels.pixels viewport.width
-                                , y2 = Pixels.pixels 0
-                                }
-                            )
-                }
+        ( WindowResized window, Loading loadingModel ) ->
+            loadComplete { loadingModel | window = Just window }
+
+        ( WindowResized window, Loaded loadedModel ) ->
+            Loaded { loadedModel | window = window }
 
         ( GotBallTexture n maybeTexture, Loading loadingModel ) ->
             case maybeTexture of
@@ -253,19 +280,15 @@ update msg model =
                 Err _ ->
                     Failed "Failed to load roughness texture"
 
-        ( RunningMsg runningMsg, Running assetsPath runningModel ) ->
+        ( RunningMsg runningMsg, Loaded loadedModel ) ->
             let
-                newGameModel =
-                    Game.update runningMsg runningModel
+                newGame =
+                    Game.update loadedModel.window runningMsg loadedModel.game
             in
-            Running assetsPath newGameModel
+            Loaded { loadedModel | game = newGame }
 
-        ( StartNewGameButtonClicked, Running assetsPath gameModel ) ->
-            Running assetsPath <|
-                Game.initial
-                    gameModel.ballTextures
-                    gameModel.roughnessTexture
-                    gameModel.window
+        ( StartNewGameButtonClicked, Loaded loadedModel ) ->
+            Loaded { loadedModel | game = Game.initial }
 
         _ ->
             model
@@ -274,10 +297,18 @@ update msg model =
 loadComplete : LoadingModel -> Model
 loadComplete model =
     if Dict.size model.ballTextures == 15 then
-        Maybe.map2 (Game.initial model.ballTextures)
+        Maybe.map2
+            (\roughnessTexture window ->
+                Loaded
+                    { ballTextures = model.ballTextures
+                    , assetsPath = model.assetsPath
+                    , window = window
+                    , roughnessTexture = roughnessTexture
+                    , game = Game.initial
+                    }
+            )
             model.roughnessTexture
             model.window
-            |> Maybe.map (Running model.assetsPath)
             |> Maybe.withDefault (Loading model)
 
     else
