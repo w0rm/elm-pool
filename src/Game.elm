@@ -933,7 +933,7 @@ currentCursor state =
         PlacingBall (OnTable _ _) _ ->
             "none"
 
-        Shooting (TargetingCueBall _) _ _ ->
+        Shooting (TargetingCueBall (Just _)) _ _ ->
             "pointer"
 
         Shooting (ElevatingCue _) _ _ ->
