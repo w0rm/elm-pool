@@ -45,6 +45,7 @@ import Scene3d.Material exposing (Texture)
 import Set exposing (Set)
 import SketchPlane3d
 import Speed
+import Table exposing (Table)
 import Time exposing (Posix)
 import Vector2d
 import Vector3d
@@ -59,6 +60,7 @@ type alias Model =
     , world : World Id
     , state : State
     , camera : Camera
+    , table : Table
     , orbiting : Maybe (Point2d Pixels ScreenCoordinates)
     }
 
@@ -118,15 +120,16 @@ initialState time pool =
     PlacingBall OutsideOfTable (BehindHeadString (EightBall.rack time pool))
 
 
-initial : Model
-initial =
+initial : Table -> Model
+initial table =
     let
         time =
             -- TODO: consider getting the initial time
             Time.millisToPosix 0
     in
-    { world = Bodies.world
+    { world = Bodies.world table
     , time = time
+    , table = table
     , camera = Camera.initial
     , state = initialState time EightBall.start
     , orbiting = Nothing
@@ -280,7 +283,7 @@ update window msg oldModel =
                 -- Stop the simulation, decide what to do next!
                 Stop (EightBall.IllegalBreak newPool) ->
                     { model
-                        | world = Bodies.world -- Reset the table.
+                        | world = Bodies.world model.table -- Reset the table.
                         , state = initialState time newPool
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
@@ -663,7 +666,18 @@ simulateWithEvents frame time world events =
                                 Contact.bodies contact
                         in
                         case ( Body.data b1, Body.data b2 ) of
-                            -- TODO: check collisions with pockets instead when we have them
+                            ( Numbered ball, Pocket ) ->
+                                ( EightBall.ballFellInPocket time ball :: currentEvents
+                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
+                                )
+
+                            ( Pocket, Numbered ball ) ->
+                                ( EightBall.ballFellInPocket time ball :: currentEvents
+                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
+                                )
+
+                            -- TODO: implement “spotted” balls. When a numbered ball falls off the table,
+                            -- it has to be placed on the foot spot
                             ( Numbered ball, Floor ) ->
                                 ( EightBall.ballFellInPocket time ball :: currentEvents
                                 , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
@@ -673,12 +687,6 @@ simulateWithEvents frame time world events =
                                 ( EightBall.ballFellInPocket time ball :: currentEvents
                                 , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
                                 )
-
-                            ( CueBall, Numbered ball ) ->
-                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
-
-                            ( Numbered ball, CueBall ) ->
-                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
 
                             ( CueBall, Floor ) ->
                                 ( EightBall.scratch time :: currentEvents
@@ -690,30 +698,41 @@ simulateWithEvents frame time world events =
                                 , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
                                 )
 
+                            ( Pocket, CueBall ) ->
+                                ( EightBall.scratch time :: currentEvents
+                                , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
+                                )
+
+                            ( CueBall, Numbered ball ) ->
+                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
+
+                            ( Numbered ball, CueBall ) ->
+                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
+
                             --(Numbered _, Numbered _) ->
                             --    (EightBall.ballsCollided time, currentWorld)
-                            ( Walls, Numbered ball ) ->
+                            ( Cushion, Numbered ball ) ->
                                 if not (Set.member (EightBall.ballNumber ball) frozen) then
                                     ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
 
                                 else
                                     ( currentEvents, currentWorld )
 
-                            ( Numbered ball, Walls ) ->
+                            ( Numbered ball, Cushion ) ->
                                 if not (Set.member (EightBall.ballNumber ball) frozen) then
                                     ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
 
                                 else
                                     ( currentEvents, currentWorld )
 
-                            ( Walls, CueBall ) ->
+                            ( Cushion, CueBall ) ->
                                 if not frozenCue then
                                     ( EightBall.cueHitWall time :: currentEvents, currentWorld )
 
                                 else
                                     ( currentEvents, currentWorld )
 
-                            ( CueBall, Walls ) ->
+                            ( CueBall, Cushion ) ->
                                 if not frozenCue then
                                     ( EightBall.cueHitWall time :: currentEvents, currentWorld )
 
@@ -743,10 +762,10 @@ frozenBalls world =
                     Contact.bodies contact
             in
             case ( Body.data b1, Body.data b2 ) of
-                ( Walls, Numbered ball ) ->
+                ( Cushion, Numbered ball ) ->
                     Set.insert (EightBall.ballNumber ball) frozen
 
-                ( Numbered ball, Walls ) ->
+                ( Numbered ball, Cushion ) ->
                     Set.insert (EightBall.ballNumber ball) frozen
 
                 _ ->
@@ -767,10 +786,10 @@ frozenCueBall world =
                     Contact.bodies contact
             in
             case ( Body.data b1, Body.data b2 ) of
-                ( Walls, CueBall ) ->
+                ( Cushion, CueBall ) ->
                     True
 
-                ( CueBall, Walls ) ->
+                ( CueBall, Cushion ) ->
                     True
 
                 _ ->
@@ -783,8 +802,8 @@ frozenCueBall world =
 -- VIEW
 
 
-view : Dict Int (Texture Color) -> Texture Float -> Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg
-view ballTextures roughnessTexture window model =
+view : Dict Int (Texture Color) -> Texture Float -> Table -> Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg
+view ballTextures roughnessTexture table window model =
     let
         sunlight =
             Scene3d.Light.directional (Scene3d.Light.castsShadows True)
@@ -798,7 +817,7 @@ view ballTextures roughnessTexture window model =
                 { upDirection = Direction3d.positiveZ
                 , chromaticity = Scene3d.Light.daylight
                 , intensityAbove = Illuminance.lux 3000
-                , intensityBelow = Illuminance.lux 0
+                , intensityBelow = Illuminance.lux 2000
                 }
 
         camera3d =
@@ -806,7 +825,7 @@ view ballTextures roughnessTexture window model =
 
         entities =
             List.map
-                (Bodies.bodyToEntity roughnessTexture ballTextures)
+                (Bodies.bodyToEntity roughnessTexture ballTextures table)
                 (World.bodies model.world)
 
         dimensions =
@@ -861,7 +880,7 @@ view ballTextures roughnessTexture window model =
         ]
         [ Scene3d.custom
             { dimensions = dimensions
-            , antialiasing = Scene3d.noAntialiasing
+            , antialiasing = Scene3d.multisampling
             , camera = camera3d
             , entities = entitiesWithUI
             , lights = Scene3d.twoLights environmentalLighting sunlight

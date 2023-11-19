@@ -15,6 +15,7 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Rectangle2d exposing (Rectangle2d)
 import Scene3d.Material as Material
+import Table exposing (Table)
 import Task
 import WebGL.Texture exposing (defaultOptions)
 
@@ -29,6 +30,7 @@ type Msg
     = WindowResized (Rectangle2d Pixels ScreenCoordinates)
     | GotBallTexture Int (Result WebGL.Texture.Error (Material.Texture Color))
     | GotRoughnessTexture (Result WebGL.Texture.Error (Material.Texture Float))
+    | GotTable (Result String Table)
     | RunningMsg Game.Msg
     | StartNewGameButtonClicked
 
@@ -36,6 +38,7 @@ type Msg
 type alias LoadingModel =
     { ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Maybe (Material.Texture Float)
+    , table : Maybe Table
     , window : Maybe (Rectangle2d Pixels ScreenCoordinates)
     , assetsPath : String
     }
@@ -44,6 +47,7 @@ type alias LoadingModel =
 type alias LoadedModel =
     { ballTextures : Dict Int (Material.Texture Color)
     , roughnessTexture : Material.Texture Float
+    , table : Table
     , window : Rectangle2d Pixels ScreenCoordinates
     , assetsPath : String
     , game : Game.Model
@@ -111,6 +115,7 @@ init unsafeFlags =
     ( Loading
         { window = Nothing
         , roughnessTexture = Nothing
+        , table = Nothing
         , ballTextures = Dict.empty
         , assetsPath = assetsPath
         }
@@ -126,6 +131,12 @@ init unsafeFlags =
                 (List.range 1 15)
             )
         , Task.attempt GotRoughnessTexture (Material.load (assetsPath ++ "img/roughness.jpg"))
+        , Task.attempt GotTable
+            (Table.load
+                { texture = assetsPath ++ "img/billiard-table.png"
+                , mesh = assetsPath ++ "/billiard-table.obj.txt"
+                }
+            )
         , Task.perform
             (\{ viewport } ->
                 WindowResized
@@ -145,11 +156,11 @@ init unsafeFlags =
 view : Model -> Html Msg
 view model =
     case model of
-        Loaded { game, roughnessTexture, ballTextures, window, assetsPath } ->
+        Loaded { game, roughnessTexture, table, ballTextures, window, assetsPath } ->
             Html.div
                 []
                 [ Html.map RunningMsg
-                    (Game.view ballTextures roughnessTexture window game)
+                    (Game.view ballTextures roughnessTexture table window game)
                 , viewCurrentStatus game assetsPath
                 ]
 
@@ -280,6 +291,17 @@ update msg model =
                 Err _ ->
                     Failed "Failed to load roughness texture"
 
+        ( GotTable maybeTable, Loading loadingModel ) ->
+            case maybeTable of
+                Ok table ->
+                    loadComplete
+                        { loadingModel
+                            | table = Just table
+                        }
+
+                Err error ->
+                    Failed ("Failed to load table mesh: " ++ error)
+
         ( RunningMsg runningMsg, Loaded loadedModel ) ->
             let
                 newGame =
@@ -288,7 +310,7 @@ update msg model =
             Loaded { loadedModel | game = newGame }
 
         ( StartNewGameButtonClicked, Loaded loadedModel ) ->
-            Loaded { loadedModel | game = Game.initial }
+            Loaded { loadedModel | game = Game.initial loadedModel.table }
 
         _ ->
             model
@@ -297,17 +319,19 @@ update msg model =
 loadComplete : LoadingModel -> Model
 loadComplete model =
     if Dict.size model.ballTextures == 15 then
-        Maybe.map2
-            (\roughnessTexture window ->
+        Maybe.map3
+            (\roughnessTexture table window ->
                 Loaded
                     { ballTextures = model.ballTextures
+                    , table = table
                     , assetsPath = model.assetsPath
                     , window = window
                     , roughnessTexture = roughnessTexture
-                    , game = Game.initial
+                    , game = Game.initial table
                     }
             )
             model.roughnessTexture
+            model.table
             model.window
             |> Maybe.withDefault (Loading model)
 

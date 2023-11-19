@@ -18,7 +18,6 @@ module Bodies exposing
 import Acceleration
 import Angle
 import Axis3d exposing (Axis3d)
-import Block3d exposing (Block3d)
 import Camera3d exposing (Camera3d)
 import Color exposing (Color)
 import Cylinder3d
@@ -30,7 +29,6 @@ import Mass
 import Physics.Body as Body exposing (Body)
 import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
 import Physics.Material exposing (Material)
-import Physics.Shape
 import Physics.World as World exposing (World)
 import Point2d
 import Point3d
@@ -41,6 +39,7 @@ import Scene3d exposing (Entity)
 import Scene3d.Material as Material
 import SketchPlane3d
 import Sphere3d exposing (Sphere3d)
+import Table exposing (Table)
 import Vector3d
 import Viewpoint3d
 
@@ -50,39 +49,43 @@ type Id
     | Numbered Ball
     | CueBall
     | Table
-    | Walls
+    | Cushion
+    | Pocket
 
 
 areaBallInHand : Rectangle3d Meters WorldCoordinates
 areaBallInHand =
-    Rectangle3d.on
-        SketchPlane3d.xy
+    let
+        xOffset =
+            Quantity.half tableLength |> Quantity.minus ballRadius
+
+        yOffset =
+            Quantity.half tableWidth |> Quantity.minus ballRadius
+    in
+    Rectangle3d.on SketchPlane3d.xy
         (Rectangle2d.from
-            (Point2d.meters
-                -(sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
-                -(sizes.halfLength - sizes.wallThickness - sizes.ballRadius)
-            )
-            (Point2d.meters
-                (sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
-                (sizes.halfLength - sizes.wallThickness - sizes.ballRadius)
-            )
+            (Point2d.xy (Quantity.negate xOffset) (Quantity.negate yOffset))
+            (Point2d.xy xOffset yOffset)
         )
         |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
 
 
 areaBehindTheHeadString : Rectangle3d Meters WorldCoordinates
 areaBehindTheHeadString =
-    Rectangle3d.on
-        SketchPlane3d.xy
+    let
+        yOffset =
+            Quantity.half tableWidth |> Quantity.minus ballRadius
+
+        xMin =
+            Quantity.half tableLength |> Quantity.minus ballRadius |> Quantity.negate
+
+        xMax =
+            Quantity.half (Quantity.half tableLength) |> Quantity.negate
+    in
+    Rectangle3d.on SketchPlane3d.xy
         (Rectangle2d.from
-            (Point2d.meters
-                -(sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
-                -(sizes.halfLength - sizes.wallThickness - sizes.ballRadius)
-            )
-            (Point2d.meters
-                (sizes.halfWidth - sizes.wallThickness - sizes.ballRadius)
-                -((sizes.halfLength - sizes.wallThickness) / 2)
-            )
+            (Point2d.xy xMin (Quantity.negate yOffset))
+            (Point2d.xy xMax yOffset)
         )
         |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
 
@@ -93,7 +96,7 @@ areaBehindTheHeadStringEntity =
         [ v1, v2, v3, v4 ] ->
             Scene3d.quad
                 (Material.nonmetal
-                    { baseColor = Color.rgb255 30 100 20
+                    { baseColor = Color.rgb255 131 146 34
                     , roughness = 1
                     }
                 )
@@ -165,14 +168,31 @@ cueEntity camera3d axis isActive =
             Scene3d.nothing
 
 
-world : World Id
-world =
+world : Table -> World Id
+world table =
     World.empty
         |> World.withGravity
             (Acceleration.metersPerSecondSquared 9.80665)
             Direction3d.negativeZ
-        |> World.add tableSurface
-        |> World.add tableWalls
+        |> World.add
+            (Body.compound table.table Table
+                |> Body.withMaterial
+                    (Physics.Material.custom
+                        { friction = 0.8
+                        , bounciness = 0
+                        }
+                    )
+            )
+        |> World.add
+            (Body.compound table.cushions Cushion
+                |> Body.withMaterial
+                    (Physics.Material.custom
+                        { friction = 0.1
+                        , bounciness = 0.8
+                        }
+                    )
+            )
+        |> World.add (Body.compound table.pockets Pocket)
         |> World.add floor
         |> (\w -> List.foldl World.add w balls)
 
@@ -180,6 +200,16 @@ world =
 ballRadius : Length
 ballRadius =
     Length.millimeters (57.15 / 2)
+
+
+tableLength : Length
+tableLength =
+    Length.meters 2.26
+
+
+tableWidth : Length
+tableWidth =
+    Length.meters 1.24
 
 
 cueLength : Length
@@ -231,10 +261,11 @@ balls =
                     Length.inMillimeters ballRadius * sqrt 3
 
                 x =
-                    (toFloat index - toFloat rowStartIndex - toFloat row / 2) * Length.inMillimeters ballRadius * 2
+                    Length.millimeters ((toFloat row - lastRow / 2) * distance)
+                        |> Quantity.plus (Quantity.half (Quantity.half tableLength))
 
                 y =
-                    (toFloat row - lastRow / 2) * distance
+                    Length.millimeters ((toFloat index - toFloat rowStartIndex - toFloat row / 2) * Length.inMillimeters ballRadius * 2)
             in
             Body.sphere ballSphere
                 (EightBall.numberedBall number
@@ -244,13 +275,13 @@ balls =
                 |> Body.withMaterial ballMaterial
                 |> Body.withDamping ballDamping
                 |> Body.withBehavior (Body.dynamic (Mass.grams 170))
-                |> Body.translateBy (Vector3d.millimeters x (y + 2100 / 4) (Length.inMillimeters ballRadius))
+                |> Body.translateBy (Vector3d.xyz x y ballRadius)
         )
         numbers
 
 
-bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Body Id -> Entity WorldCoordinates
-bodyToEntity roughnessTexture ballTextures body =
+bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Table -> Body Id -> Entity WorldCoordinates
+bodyToEntity roughnessTexture ballTextures table body =
     let
         id =
             Body.data body
@@ -298,28 +329,12 @@ bodyToEntity roughnessTexture ballTextures body =
                         ballSphere
 
                 Table ->
-                    tableBlocks
-                        |> List.map
-                            (Scene3d.blockWithShadow
-                                (Material.nonmetal
-                                    { baseColor = Color.rgb255 10 80 0
-                                    , roughness = 1
-                                    }
-                                )
-                            )
-                        |> Scene3d.group
+                    Scene3d.meshWithShadow table.material
+                        table.mesh
+                        table.shadow
 
-                Walls ->
-                    wallsBlocks
-                        |> List.map
-                            (Scene3d.blockWithShadow
-                                (Material.nonmetal
-                                    { baseColor = Color.rgb255 10 80 0
-                                    , roughness = 0.9
-                                    }
-                                )
-                            )
-                        |> Scene3d.group
+                _ ->
+                    Scene3d.nothing
     in
     Scene3d.placeIn frame entity
 
@@ -372,7 +387,6 @@ sizes :
     , halfCornerHole : Float
     , halfCornerDiagonal : Float
     , height : Float
-    , thickness : Float
     , floorHalfSize : Float
     , ballRadius : Float
     }
@@ -395,76 +409,6 @@ sizes =
     , halfCornerHole = halfCornerHole
     , halfCornerDiagonal = sqrt (halfCornerHole ^ 2 / 2)
     , height = 0.45 -- distance from the floor until the top of the table
-    , thickness = 0.03 -- the height of table top
     , floorHalfSize = 15
     , ballRadius = 57.15 / 2000
     }
-
-
-tableBlocks : List (Block3d Meters BodyCoordinates)
-tableBlocks =
-    let
-        cornerBlock =
-            Block3d.from
-                (Point3d.meters -sizes.halfCornerDiagonal -sizes.halfCornerDiagonal 0)
-                (Point3d.meters sizes.halfCornerDiagonal sizes.halfCornerDiagonal -sizes.thickness)
-                |> Block3d.rotateAround Axis3d.z (Angle.degrees 45)
-    in
-    [ Block3d.from
-        (Point3d.meters -sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) 0)
-        (Point3d.meters sizes.halfWidth (sizes.halfLength - sizes.halfCornerHole) -sizes.thickness)
-    , Block3d.from
-        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0)
-        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) sizes.halfLength -sizes.thickness)
-    , Block3d.from
-        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0)
-        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) -sizes.halfLength -sizes.thickness)
-    , Block3d.from
-        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0)
-        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) -sizes.halfLength -sizes.thickness)
-    , Block3d.translateBy (Vector3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0) cornerBlock
-    , Block3d.translateBy (Vector3d.meters (sizes.halfWidth - sizes.halfCornerHole) (-sizes.halfLength + sizes.halfCornerHole) 0) cornerBlock
-    , Block3d.translateBy (Vector3d.meters (-sizes.halfWidth + sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0) cornerBlock
-    , Block3d.translateBy (Vector3d.meters (sizes.halfWidth - sizes.halfCornerHole) (sizes.halfLength - sizes.halfCornerHole) 0) cornerBlock
-    ]
-
-
-tableSurface : Body Id
-tableSurface =
-    Body.compound (List.map Physics.Shape.block tableBlocks) Table
-        |> Body.withMaterial
-            (Physics.Material.custom
-                { friction = 0.8
-                , bounciness = 0
-                }
-            )
-
-
-wallsBlocks : List (Block3d Meters BodyCoordinates)
-wallsBlocks =
-    [ Block3d.from
-        (Point3d.meters -sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) sizes.wallHeight)
-        (Point3d.meters (-sizes.halfWidth + sizes.wallThickness) -sizes.halfHole 0)
-    , Block3d.from
-        (Point3d.meters (sizes.halfWidth - sizes.wallThickness) -sizes.halfHole 0)
-        (Point3d.meters sizes.halfWidth (-sizes.halfLength + sizes.halfCornerHole) sizes.wallHeight)
-    , Block3d.from
-        (Point3d.meters (sizes.halfWidth - sizes.halfCornerHole) (-sizes.halfLength + sizes.wallThickness) 0)
-        (Point3d.meters (-sizes.halfWidth + sizes.halfCornerHole) -sizes.halfLength sizes.wallHeight)
-    ]
-        |> List.foldl
-            (\block result ->
-                Block3d.rotateAround Axis3d.z (Angle.degrees 180) block :: block :: result
-            )
-            []
-
-
-tableWalls : Body Id
-tableWalls =
-    Body.compound (List.map Physics.Shape.block wallsBlocks) Walls
-        |> Body.withMaterial
-            (Physics.Material.custom
-                { friction = 0.1
-                , bounciness = 0.8
-                }
-            )
