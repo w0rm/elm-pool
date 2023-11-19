@@ -47,7 +47,7 @@ initial : Camera
 initial =
     Camera
         { zoom = Animator.init 0.9
-        , azimuth = Angle.degrees -25
+        , azimuth = Angle.degrees -115
         , elevation = Animator.init (Angle.degrees 30)
         , focalPoint = Animator.init Point3d.origin
         }
@@ -67,7 +67,7 @@ camera3d (Camera camera) =
     let
         distance =
             Animator.move camera.zoom Animator.at
-                |> Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 5)
+                |> Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 6)
     in
     Camera3d.perspective
         { viewpoint =

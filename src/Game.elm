@@ -580,7 +580,7 @@ shoot axis startTime endTime isBreak =
                             (Force.newtons 10)
                             (if isBreak then
                                 -- Make break a bit stronger
-                                Force.newtons 100
+                                Force.newtons 90
 
                              else
                                 Force.newtons 60
