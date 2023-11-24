@@ -17,7 +17,7 @@ import Length
 import Obj.Decode exposing (Decoder)
 import Physics.Coordinates exposing (BodyCoordinates)
 import Physics.Shape as Shape exposing (Shape)
-import Scene3d.Material
+import Scene3d.Material as Material
 import Scene3d.Mesh exposing (Shadow, Textured)
 import Task exposing (Task)
 
@@ -28,11 +28,11 @@ type alias Table =
     , pockets : List Shape
     , mesh : Textured BodyCoordinates
     , shadow : Shadow BodyCoordinates
-    , material : Scene3d.Material.Textured BodyCoordinates
+    , material : Material.Textured BodyCoordinates
     }
 
 
-load : { texture : String, mesh : String } -> Task String Table
+load : { colorTexture : String, roughnessTexture : String, metallicTexture : String, mesh : String } -> Task String Table
 load urls =
     Http.task
         { method = "get"
@@ -53,13 +53,24 @@ load urls =
         }
         |> Task.andThen
             (\fn ->
-                Scene3d.Material.loadWith Scene3d.Material.nearestNeighborFiltering urls.texture
+                Task.map3
+                    (\colorTexture _ metallicTexture ->
+                        fn
+                            (Material.texturedPbr
+                                { baseColor = colorTexture
+                                , roughness = Material.constant 0.8 -- roughnessTexture
+                                , metallic = metallicTexture
+                                }
+                            )
+                    )
+                    (Material.loadWith Material.nearestNeighborFiltering urls.colorTexture)
+                    (Material.load urls.roughnessTexture)
+                    (Material.load urls.metallicTexture)
                     |> Task.mapError (\_ -> "Failed to load texture")
-                    |> Task.map (\texture -> fn (Scene3d.Material.texturedMatte texture))
             )
 
 
-tableDecoder : Decoder (Scene3d.Material.Textured BodyCoordinates -> Table)
+tableDecoder : Decoder (Material.Textured BodyCoordinates -> Table)
 tableDecoder =
     Obj.Decode.map4
         (\tableConvexes cushionsConvexes pocketsConvex visual ->

@@ -325,7 +325,12 @@ bodyToEntity roughnessTexture ballTextures table body =
 
                 CueBall ->
                     Scene3d.sphereWithShadow
-                        (Material.matte (Color.rgb255 255 255 255))
+                        (Material.texturedPbr
+                            { baseColor = Material.constant Color.white
+                            , roughness = roughnessTexture
+                            , metallic = Material.constant 0
+                            }
+                        )
                         ballSphere
 
                 Table ->
@@ -347,11 +352,15 @@ cueBall =
         |> Body.withBehavior (Body.dynamic (Mass.grams 170))
 
 
-cueBallEntity : Bool -> Scene3d.Entity BodyCoordinates
-cueBallEntity isActive =
+cueBallEntity : Bool -> Material.Texture Float -> Scene3d.Entity BodyCoordinates
+cueBallEntity isActive roughnessTexture =
     Scene3d.sphereWithShadow
         (if isActive then
-            Material.matte Color.white
+            Material.texturedPbr
+                { baseColor = Material.constant Color.white
+                , roughness = roughnessTexture
+                , metallic = Material.constant 0
+                }
 
          else
             Material.matte inactiveColor

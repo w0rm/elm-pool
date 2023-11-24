@@ -29,6 +29,7 @@ import Illuminance
 import Json.Decode
 import Length exposing (Meters)
 import List
+import LuminousFlux
 import Physics.Body as Body exposing (Body)
 import Physics.Contact as Contact
 import Physics.Coordinates exposing (WorldCoordinates)
@@ -808,16 +809,37 @@ view ballTextures roughnessTexture table window model =
         sunlight =
             Scene3d.Light.directional (Scene3d.Light.castsShadows True)
                 { direction = Direction3d.xyZ (Angle.degrees 135) (Angle.degrees -60)
-                , intensity = Illuminance.lux 10000
+                , intensity = Illuminance.lux 2000
                 , chromaticity = Scene3d.Light.daylight
+                }
+
+        lamp1 =
+            Scene3d.Light.point Scene3d.Light.neverCastsShadows
+                { position = Point3d.xyz Quantity.zero Quantity.zero (Length.meters 0.5)
+                , chromaticity = Scene3d.Light.fluorescent
+                , intensity = LuminousFlux.lumens 2000
+                }
+
+        lamp2 =
+            Scene3d.Light.point Scene3d.Light.neverCastsShadows
+                { position = Point3d.xyz (Length.meters 0.8) Quantity.zero (Length.meters 0.5)
+                , chromaticity = Scene3d.Light.fluorescent
+                , intensity = LuminousFlux.lumens 2000
+                }
+
+        lamp3 =
+            Scene3d.Light.point Scene3d.Light.neverCastsShadows
+                { position = Point3d.xyz (Length.meters -0.8) Quantity.zero (Length.meters 0.5)
+                , chromaticity = Scene3d.Light.fluorescent
+                , intensity = LuminousFlux.lumens 2000
                 }
 
         environmentalLighting =
             Scene3d.Light.soft
                 { upDirection = Direction3d.positiveZ
-                , chromaticity = Scene3d.Light.daylight
-                , intensityAbove = Illuminance.lux 3000
-                , intensityBelow = Illuminance.lux 2000
+                , chromaticity = Scene3d.Light.fluorescent
+                , intensityAbove = Illuminance.lux 400
+                , intensityBelow = Illuminance.lux 300
                 }
 
         camera3d =
@@ -846,7 +868,7 @@ view ballTextures roughnessTexture table window model =
                                     Scene3d.nothing
 
                         cueBallEntity =
-                            Bodies.cueBallEntity (spawn == CanPlace)
+                            Bodies.cueBallEntity (spawn == CanPlace) roughnessTexture
                                 |> Scene3d.placeIn (Frame3d.atPoint position)
                     in
                     cueBallEntity :: highlightAreaEntity :: entities
@@ -883,8 +905,8 @@ view ballTextures roughnessTexture table window model =
             , antialiasing = Scene3d.multisampling
             , camera = camera3d
             , entities = entitiesWithUI
-            , lights = Scene3d.twoLights environmentalLighting sunlight
-            , exposure = Scene3d.exposureValue 13
+            , lights = Scene3d.fiveLights environmentalLighting sunlight lamp1 lamp2 lamp3
+            , exposure = Scene3d.exposureValue 10
             , whiteBalance = Scene3d.Light.daylight
             , clipDepth = Bodies.clipDepth
             , background = Scene3d.backgroundColor Color.black

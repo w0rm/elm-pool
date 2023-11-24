@@ -133,7 +133,9 @@ init unsafeFlags =
         , Task.attempt GotRoughnessTexture (Material.load (assetsPath ++ "img/roughness.jpg"))
         , Task.attempt GotTable
             (Table.load
-                { texture = assetsPath ++ "img/billiard-table.png"
+                { colorTexture = assetsPath ++ "img/billiard-table-color.png"
+                , roughnessTexture = assetsPath ++ "img/billiard-table-roughness.png"
+                , metallicTexture = assetsPath ++ "img/billiard-table-metallic.png"
                 , mesh = assetsPath ++ "/billiard-table.obj.txt"
                 }
             )
