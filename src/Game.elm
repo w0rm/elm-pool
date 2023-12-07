@@ -17,6 +17,7 @@ import Bodies exposing (Id(..))
 import Browser.Events
 import Camera exposing (Camera, ScreenCoordinates)
 import Color exposing (Color)
+import Cue
 import Dict exposing (Dict)
 import Direction3d
 import Duration
@@ -530,7 +531,7 @@ canShoot axis world =
         pointOnCueEnd =
             Point3d.translateIn
                 (Direction3d.perpendicularTo direction)
-                Bodies.cueRadius
+                Cue.radius
                 (Axis3d.originPoint axis)
 
         -- ignore collision with the cue ball
@@ -557,7 +558,7 @@ canShoot axis world =
                     -- if the distance is greater than the cue length + offset, then there is no overlap
                     rotatedPoint
                         |> Point3d.distanceFrom collisionPoint
-                        |> Quantity.greaterThan (Quantity.plus Bodies.cueOffset Bodies.cueLength)
+                        |> Quantity.greaterThan (Quantity.plus Cue.offset Cue.length)
 
                 Nothing ->
                     True
@@ -814,23 +815,9 @@ view ballTextures roughnessTexture table window model =
                 , chromaticity = Scene3d.Light.daylight
                 }
 
-        lamp1 =
+        lamp n =
             Scene3d.Light.point Scene3d.Light.neverCastsShadows
-                { position = Point3d.xyz Quantity.zero Quantity.zero (Length.meters 0.5)
-                , chromaticity = Scene3d.Light.fluorescent
-                , intensity = LuminousFlux.lumens 2000
-                }
-
-        lamp2 =
-            Scene3d.Light.point Scene3d.Light.neverCastsShadows
-                { position = Point3d.xyz (Length.meters 0.8) Quantity.zero (Length.meters 0.5)
-                , chromaticity = Scene3d.Light.fluorescent
-                , intensity = LuminousFlux.lumens 2000
-                }
-
-        lamp3 =
-            Scene3d.Light.point Scene3d.Light.neverCastsShadows
-                { position = Point3d.xyz (Length.meters -0.8) Quantity.zero (Length.meters 0.5)
+                { position = Point3d.xyz (Length.meters ((n - 2) * 0.8)) Quantity.zero (Length.meters 0.5)
                 , chromaticity = Scene3d.Light.fluorescent
                 , intensity = LuminousFlux.lumens 2000
                 }
@@ -845,6 +832,9 @@ view ballTextures roughnessTexture table window model =
 
         camera3d =
             Camera.camera3d model.camera
+
+        clipDepth =
+            Length.meters 0.1
 
         entities =
             List.map
@@ -885,7 +875,7 @@ view ballTextures roughnessTexture table window model =
                         isActive =
                             canShoot axis model.world
                     in
-                    Bodies.cueEntity camera3d axis isActive :: entities
+                    Bodies.cueEntity camera3d clipDepth axis isActive :: entities
 
                 _ ->
                     entities
@@ -906,10 +896,10 @@ view ballTextures roughnessTexture table window model =
             , antialiasing = Scene3d.multisampling
             , camera = camera3d
             , entities = entitiesWithUI
-            , lights = Scene3d.fiveLights environmentalLighting sunlight lamp1 lamp2 lamp3
+            , lights = Scene3d.fiveLights environmentalLighting sunlight (lamp 1) (lamp 2) (lamp 3)
             , exposure = Scene3d.exposureValue 10
             , whiteBalance = Scene3d.Light.daylight
-            , clipDepth = Bodies.clipDepth
+            , clipDepth = clipDepth
             , background = Scene3d.backgroundColor Color.black
             , toneMapping = Scene3d.noToneMapping
             }
