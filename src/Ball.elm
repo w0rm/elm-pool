@@ -1,5 +1,6 @@
-module Ball exposing (body, rack, radius, sphere)
+module Ball exposing (body, entity, rack, radius)
 
+import Color exposing (Color)
 import Length exposing (Length, Meters)
 import Mass exposing (Mass)
 import Physics.Body as Body exposing (Body)
@@ -8,6 +9,8 @@ import Physics.Material as Material exposing (Material)
 import Point2d exposing (Point2d)
 import Point3d
 import Quantity
+import Scene3d exposing (Entity)
+import Scene3d.Material as Material
 import SketchPlane3d
 import Sphere3d exposing (Sphere3d)
 import Vector3d
@@ -51,6 +54,18 @@ body id =
         |> Body.withMaterial ballMaterial
         |> Body.withDamping damping
         |> Body.withBehavior (Body.dynamic weight)
+
+
+entity : Material.Texture Color -> Material.Texture Float -> Entity BodyCoordinates
+entity baseColor roughnessTexture =
+    Scene3d.sphereWithShadow
+        (Material.texturedPbr
+            { baseColor = baseColor
+            , roughness = roughnessTexture
+            , metallic = Material.constant 0
+            }
+        )
+        sphere
 
 
 rack : Point2d Meters WorldCoordinates -> (Int -> Maybe id) -> List (Body id)

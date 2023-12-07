@@ -10,6 +10,7 @@ module Game exposing
     , view
     )
 
+import Acceleration
 import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
 import Ball
@@ -42,9 +43,9 @@ import Point3d exposing (Point3d)
 import Quantity
 import Rectangle2d exposing (Rectangle2d)
 import Rectangle3d exposing (Rectangle3d)
-import Scene3d
+import Scene3d exposing (Entity)
 import Scene3d.Light
-import Scene3d.Material exposing (Texture)
+import Scene3d.Material as Material exposing (Texture)
 import Set exposing (Set)
 import SketchPlane3d
 import Speed
@@ -130,13 +131,28 @@ initial table =
             -- TODO: consider getting the initial time
             Time.millisToPosix 0
     in
-    { world = Bodies.world table
+    { world = initialWorld table
     , time = time
     , table = table
     , camera = Camera.initial
     , state = initialState time EightBall.start
     , orbiting = Nothing
     }
+
+
+initialWorld : Table -> World Id
+initialWorld table =
+    World.empty
+        |> World.withGravity
+            (Acceleration.metersPerSecondSquared 9.80665)
+            Direction3d.negativeZ
+        |> (\w -> List.foldl World.add w table.bodies)
+        |> (\w ->
+                List.foldl World.add w <|
+                    Ball.rack
+                        Table.footSpot
+                        (EightBall.numberedBall >> Maybe.map Numbered)
+           )
 
 
 
@@ -286,7 +302,7 @@ update window msg oldModel =
                 -- Stop the simulation, decide what to do next!
                 Stop (EightBall.IllegalBreak newPool) ->
                     { model
-                        | world = Bodies.world model.table -- Reset the table.
+                        | world = initialWorld model.table -- Reset the table.
                         , state = initialState time newPool
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
@@ -836,9 +852,12 @@ view ballTextures roughnessTexture table window model =
         clipDepth =
             Length.meters 0.1
 
+        inactiveColor =
+            Color.rgb255 130 130 130
+
         entities =
             List.map
-                (Bodies.bodyToEntity roughnessTexture ballTextures table)
+                (bodyToEntity roughnessTexture ballTextures table)
                 (World.bodies model.world)
 
         dimensions =
@@ -850,32 +869,43 @@ view ballTextures roughnessTexture table window model =
             case model.state of
                 PlacingBall (OnTable spawn position) poolWithBallInHand ->
                     let
-                        highlightAreaEntity =
+                        highlightArea =
                             case poolWithBallInHand of
                                 BehindHeadString _ ->
-                                    Bodies.areaBehindTheHeadStringEntity
+                                    Table.areaBehindTheHeadStringEntity
 
                                 Anywhere _ ->
                                     Scene3d.nothing
 
-                        cueBallEntity =
-                            Bodies.cueBallEntity (spawn == CanPlace) roughnessTexture
+                        baseColor =
+                            if spawn == CanPlace then
+                                Material.constant Color.white
+
+                            else
+                                Material.constant inactiveColor
+
+                        cueBall =
+                            Ball.entity baseColor roughnessTexture
                                 |> Scene3d.placeIn (Frame3d.atPoint position)
                     in
-                    cueBallEntity :: highlightAreaEntity :: entities
+                    cueBall :: highlightArea :: entities
 
                 PlacingBall OutsideOfTable (BehindHeadString _) ->
-                    Bodies.areaBehindTheHeadStringEntity :: entities
+                    Table.areaBehindTheHeadStringEntity :: entities
 
                 Shooting _ cue _ ->
                     let
                         axis =
                             cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
 
-                        isActive =
-                            canShoot axis model.world
+                        color =
+                            if canShoot axis model.world then
+                                Color.white
+
+                            else
+                                inactiveColor
                     in
-                    Bodies.cueEntity camera3d clipDepth axis isActive :: entities
+                    Cue.entity camera3d clipDepth axis color :: entities
 
                 _ ->
                     entities
@@ -905,6 +935,38 @@ view ballTextures roughnessTexture table window model =
             }
         , viewShootingStrength window model
         ]
+
+
+bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Table -> Body Id -> Entity WorldCoordinates
+bodyToEntity roughnessTexture ballTextures table body =
+    Scene3d.placeIn (Body.frame body) <|
+        case Body.data body of
+            Floor ->
+                Scene3d.quad
+                    (Material.matte (Color.rgb255 46 52 54))
+                    (Point3d.meters -15 -15 0)
+                    (Point3d.meters 15 -15 0)
+                    (Point3d.meters 15 15 0)
+                    (Point3d.meters -15 15 0)
+
+            Numbered ball ->
+                let
+                    baseColor =
+                        Dict.get (EightBall.ballNumber ball) ballTextures
+                            |> Maybe.withDefault (Material.constant Color.black)
+                in
+                Ball.entity baseColor roughnessTexture
+                    -- rotate to see the numbers
+                    |> Scene3d.rotateAround Axis3d.x (Angle.degrees 90)
+
+            CueBall ->
+                Ball.entity (Material.constant Color.white) roughnessTexture
+
+            Bodies.Table ->
+                table.entity
+
+            _ ->
+                Scene3d.nothing
 
 
 viewShootingStrength : Rectangle2d Pixels ScreenCoordinates -> Model -> Html Msg

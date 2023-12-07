@@ -2,6 +2,7 @@ module Table exposing
     ( Table
     , areaBallInHand
     , areaBehindTheHeadString
+    , areaBehindTheHeadStringEntity
     , footSpot
     , load
     )
@@ -18,30 +19,32 @@ The Billiard Table model is designed by Kolja Wilcke <https://twitter.com/01k>
 -}
 
 import Ball
+import Bodies exposing (Id(..))
+import Color
 import Direction3d
 import Frame3d
 import Http
 import Length exposing (Length, Meters)
 import Obj.Decode exposing (Decoder)
+import Physics.Body as Body exposing (Body)
 import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
-import Physics.Shape as Shape exposing (Shape)
+import Physics.Material
+import Physics.Shape as Shape
 import Point2d exposing (Point2d)
+import Point3d
 import Quantity
 import Rectangle2d
 import Rectangle3d exposing (Rectangle3d)
+import Scene3d exposing (Entity)
 import Scene3d.Material as Material
-import Scene3d.Mesh exposing (Shadow, Textured)
+import Scene3d.Mesh
 import SketchPlane3d
 import Task exposing (Task)
 
 
 type alias Table =
-    { table : List Shape
-    , cushions : List Shape
-    , pockets : List Shape
-    , mesh : Textured BodyCoordinates
-    , shadow : Shadow BodyCoordinates
-    , material : Material.Textured BodyCoordinates
+    { bodies : List (Body Id)
+    , entity : Entity BodyCoordinates
     }
 
 
@@ -90,14 +93,31 @@ tableDecoder =
             let
                 mesh =
                     Scene3d.Mesh.texturedFaces visual
+
+                bodies =
+                    [ Body.plane Floor
+                        -- distance from the floor until the top of the table
+                        |> Body.moveTo (Point3d.meters 0 0 -0.45)
+                    , Body.compound (List.map Shape.unsafeConvex tableConvexes) Bodies.Table
+                        |> Body.withMaterial
+                            (Physics.Material.custom
+                                { friction = 0.8
+                                , bounciness = 0
+                                }
+                            )
+                    , Body.compound (List.map Shape.unsafeConvex cushionsConvexes) Cushion
+                        |> Body.withMaterial
+                            (Physics.Material.custom
+                                { friction = 0.1
+                                , bounciness = 0.8
+                                }
+                            )
+                    , Body.compound [ Shape.unsafeConvex pocketsConvex ] Pocket
+                    ]
             in
             \material ->
-                { table = List.map Shape.unsafeConvex tableConvexes
-                , cushions = List.map Shape.unsafeConvex cushionsConvexes
-                , pockets = [ Shape.unsafeConvex pocketsConvex ]
-                , mesh = mesh
-                , shadow = Scene3d.Mesh.shadow mesh
-                , material = material
+                { bodies = bodies
+                , entity = Scene3d.meshWithShadow material mesh (Scene3d.Mesh.shadow mesh)
                 }
         )
         (startsWith "Table-" (Obj.Decode.trianglesIn Frame3d.atOrigin))
@@ -170,3 +190,24 @@ areaBehindTheHeadString =
             (Point2d.xy xMax yOffset)
         )
         |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
+
+
+{-| Highlight the area where the ball should be placed
+-}
+areaBehindTheHeadStringEntity : Entity WorldCoordinates
+areaBehindTheHeadStringEntity =
+    case Rectangle3d.vertices areaBehindTheHeadString of
+        [ v1, v2, v3, v4 ] ->
+            Scene3d.quad
+                (Material.nonmetal
+                    { baseColor = Color.rgb255 131 146 34
+                    , roughness = 1
+                    }
+                )
+                v1
+                v2
+                v3
+                v4
+
+        _ ->
+            Scene3d.nothing
