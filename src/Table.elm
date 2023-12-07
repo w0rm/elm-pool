@@ -123,10 +123,10 @@ tableDecoder =
                         , -- floor
                           Scene3d.quad
                             (Material.matte (Color.rgb255 46 52 54))
-                            (Point3d.meters -15 -15 0)
-                            (Point3d.meters 15 -15 0)
-                            (Point3d.meters 15 15 0)
-                            (Point3d.meters -15 15 0)
+                            (Point3d.meters -15 -15 -0.45)
+                            (Point3d.meters 15 -15 -0.45)
+                            (Point3d.meters 15 15 -0.45)
+                            (Point3d.meters -15 15 -0.45)
                         ]
                 }
         )

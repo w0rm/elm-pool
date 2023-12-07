@@ -259,7 +259,7 @@ update window msg oldModel =
             in
             -- the message can be sent many times
             -- we need to check if the button isn't already pressed
-            if Cue.canShoot axis model.world && shot.shootPressedAt == Nothing then
+            if Cue.canShoot model.world axis && shot.shootPressedAt == Nothing then
                 let
                     -- save the time the buttom was pressed
                     newShot =
@@ -279,7 +279,7 @@ update window msg oldModel =
                 startTime =
                     Maybe.withDefault model.time shot.shootPressedAt
             in
-            if Cue.canShoot axis model.world then
+            if Cue.canShoot model.world axis then
                 { model
                     | state = Simulating [] pool
                     , camera = Camera.zoomOut model.camera
@@ -851,13 +851,13 @@ view ballTextures roughnessTexture table window model =
                             cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
 
                         color =
-                            if Cue.canShoot axis model.world then
+                            if Cue.canShoot model.world axis then
                                 Color.white
 
                             else
                                 inactiveColor
                     in
-                    Cue.entity camera3d clipDepth axis color :: entities
+                    Cue.entity camera3d clipDepth color axis :: entities
 
                 _ ->
                     entities

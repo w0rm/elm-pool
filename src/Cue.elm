@@ -36,8 +36,8 @@ offset =
     Length.centimeters 2
 
 
-entity : Camera3d Meters WorldCoordinates -> Length -> Axis3d Meters WorldCoordinates -> Color -> Entity WorldCoordinates
-entity camera3d clipDepth axis color =
+entity : Camera3d Meters WorldCoordinates -> Length -> Color -> Axis3d Meters WorldCoordinates -> Entity WorldCoordinates
+entity camera3d clipDepth color axis =
     case cylinder camera3d clipDepth axis of
         Just trimmedCylinder ->
             Scene3d.cylinderWithShadow
@@ -89,8 +89,8 @@ cylinder camera3d clipDepth axis =
 
 {-| Check if the cue doesn't overlap with any other objects
 -}
-canShoot : Axis3d Meters WorldCoordinates -> World Id -> Bool
-canShoot axis world =
+canShoot : World Id -> Axis3d Meters WorldCoordinates -> Bool
+canShoot world axis =
     let
         direction =
             Axis3d.direction axis
