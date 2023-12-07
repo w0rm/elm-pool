@@ -12,6 +12,7 @@ module Game exposing
 
 import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
+import Ball
 import Bodies exposing (Id(..))
 import Browser.Events
 import Camera exposing (Camera, ScreenCoordinates)
@@ -164,10 +165,10 @@ update window msg oldModel =
                 placingArea =
                     case pool of
                         Anywhere _ ->
-                            Bodies.areaBallInHand
+                            Table.areaBallInHand
 
                         BehindHeadString _ ->
-                            Bodies.areaBehindTheHeadString
+                            Table.areaBehindTheHeadString
 
                 mouseRay =
                     Camera.ray model.camera window mousePosition
@@ -190,7 +191,7 @@ update window msg oldModel =
             in
             { model
                 | state = Shooting (TargetingCueBall Nothing) initialShot newPool
-                , world = World.add (Body.moveTo position Bodies.cueBall) model.world
+                , world = World.add (Body.moveTo position (Ball.body CueBall)) model.world
                 , camera = Camera.focusOn position model.camera
             }
 
@@ -368,12 +369,12 @@ placeBallInHand mouseRay spawnArea world =
     let
         -- raise the interection rectangles to vertically align with the center of the ball
         elevatedWholeTableArea =
-            Bodies.areaBallInHand
-                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
+            Table.areaBallInHand
+                |> Rectangle3d.translateIn Direction3d.z Ball.radius
 
         elevatedSpawnArea =
             spawnArea
-                |> Rectangle3d.translateIn Direction3d.z Bodies.ballRadius
+                |> Rectangle3d.translateIn Direction3d.z Ball.radius
     in
     case Axis3d.intersectionWithRectangle elevatedWholeTableArea mouseRay of
         Just position ->
@@ -399,7 +400,7 @@ placeBallInHandHelp bodies position =
                     if
                         Body.originPoint body
                             |> Point3d.distanceFrom position
-                            |> Quantity.lessThan (Quantity.twice Bodies.ballRadius)
+                            |> Quantity.lessThan (Quantity.twice Ball.radius)
                     then
                         OnTable CannotPlace position
 
@@ -508,7 +509,7 @@ cueAxis ballPosition cameraAzimuth { hitTarget, cueElevation } =
             Direction3d.xyZ hitAzimuth hitTarget.elevation
 
         pointOnCueBall =
-            Point3d.translateIn pointDirection Bodies.ballRadius ballPosition
+            Point3d.translateIn pointDirection Ball.radius ballPosition
 
         axisDirection =
             Direction3d.xyZ cameraAzimuth cueElevation
