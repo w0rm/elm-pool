@@ -117,7 +117,17 @@ tableDecoder =
             in
             \material ->
                 { bodies = bodies
-                , entity = Scene3d.meshWithShadow material mesh (Scene3d.Mesh.shadow mesh)
+                , entity =
+                    Scene3d.group
+                        [ Scene3d.meshWithShadow material mesh (Scene3d.Mesh.shadow mesh)
+                        , -- floor
+                          Scene3d.quad
+                            (Material.matte (Color.rgb255 46 52 54))
+                            (Point3d.meters -15 -15 0)
+                            (Point3d.meters 15 -15 0)
+                            (Point3d.meters 15 15 0)
+                            (Point3d.meters -15 15 0)
+                        ]
                 }
         )
         (startsWith "Table-" (Obj.Decode.trianglesIn Frame3d.atOrigin))

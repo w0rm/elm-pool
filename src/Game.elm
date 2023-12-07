@@ -259,7 +259,7 @@ update window msg oldModel =
             in
             -- the message can be sent many times
             -- we need to check if the button isn't already pressed
-            if canShoot axis model.world && shot.shootPressedAt == Nothing then
+            if Cue.canShoot axis model.world && shot.shootPressedAt == Nothing then
                 let
                     -- save the time the buttom was pressed
                     newShot =
@@ -279,7 +279,7 @@ update window msg oldModel =
                 startTime =
                     Maybe.withDefault model.time shot.shootPressedAt
             in
-            if canShoot axis model.world then
+            if Cue.canShoot axis model.world then
                 { model
                     | state = Simulating [] pool
                     , camera = Camera.zoomOut model.camera
@@ -532,54 +532,6 @@ cueAxis ballPosition cameraAzimuth { hitTarget, cueElevation } =
             Direction3d.xyZ cameraAzimuth cueElevation
     in
     Axis3d.through pointOnCueBall axisDirection
-
-
-{-| Check if the cue doesn't overlap with any other objects
--}
-canShoot : Axis3d Meters WorldCoordinates -> World Id -> Bool
-canShoot axis world =
-    let
-        direction =
-            Axis3d.direction axis
-
-        -- point on the perimeter of the tip of the cue cylinder,
-        -- where the cue is placed at the hit point on the ball
-        pointOnCueEnd =
-            Point3d.translateIn
-                (Direction3d.perpendicularTo direction)
-                Cue.radius
-                (Axis3d.originPoint axis)
-
-        -- ignore collision with the cue ball
-        worldWithoutCueBall =
-            World.keepIf (\b -> Body.data b /= CueBall) world
-    in
-    -- cast 8 rays along the surface of the cue cylinder
-    List.all
-        (\n ->
-            let
-                rotatedPoint =
-                    pointOnCueEnd
-                        |> Point3d.rotateAround axis (Angle.turns (toFloat n / 8))
-
-                cueRay =
-                    Axis3d.through rotatedPoint direction
-            in
-            case World.raycast cueRay worldWithoutCueBall of
-                Just { point, body } ->
-                    let
-                        collisionPoint =
-                            point |> Point3d.placeIn (Body.frame body)
-                    in
-                    -- if the distance is greater than the cue length + offset, then there is no overlap
-                    rotatedPoint
-                        |> Point3d.distanceFrom collisionPoint
-                        |> Quantity.greaterThan (Quantity.plus Cue.offset Cue.length)
-
-                Nothing ->
-                    True
-        )
-        (List.range 0 7)
 
 
 {-| Apply impulse to the cue ball depending on the shooting strength.
@@ -899,7 +851,7 @@ view ballTextures roughnessTexture table window model =
                             cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
 
                         color =
-                            if canShoot axis model.world then
+                            if Cue.canShoot axis model.world then
                                 Color.white
 
                             else
@@ -941,14 +893,6 @@ bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Ta
 bodyToEntity roughnessTexture ballTextures table body =
     Scene3d.placeIn (Body.frame body) <|
         case Body.data body of
-            Floor ->
-                Scene3d.quad
-                    (Material.matte (Color.rgb255 46 52 54))
-                    (Point3d.meters -15 -15 0)
-                    (Point3d.meters 15 -15 0)
-                    (Point3d.meters 15 15 0)
-                    (Point3d.meters -15 15 0)
-
             Numbered ball ->
                 let
                     baseColor =
