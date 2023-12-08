@@ -1,10 +1,6 @@
 module Table exposing
-    ( Table
-    , areaBallInHand
-    , areaBehindTheHeadString
-    , areaBehindTheHeadStringEntity
-    , footSpot
-    , load
+    ( Table, load
+    , footSpot, areaBallInHand, areaBehindTheHeadString, areaBehindTheHeadStringEntity
     )
 
 {-| elm-obj-file is used to decode various objects from the obj file.
@@ -15,6 +11,13 @@ module Table exposing
   - Mesh used for rendering: `Billiard-Table`
 
 The Billiard Table model is designed by Kolja Wilcke <https://twitter.com/01k>
+
+@docs Table, load
+
+
+# Dimensions
+
+@docs footSpot, areaBallInHand, areaBehindTheHeadString, areaBehindTheHeadStringEntity
 
 -}
 
@@ -42,96 +45,15 @@ import SketchPlane3d
 import Task exposing (Task)
 
 
+{-| The visual entity and the collider bodies used in simulation
+-}
 type alias Table =
     { bodies : List (Body Id)
     , entity : Entity BodyCoordinates
     }
 
 
-length : Length
-length =
-    Length.meters 2.26
-
-
-width : Length
-width =
-    Length.meters 1.24
-
-
-{-| Anywhere on the table. This where the cue ball should be placed after it goes in a pocket
-or after the failure to hit the object ball.
--}
-areaBallInHand : Rectangle3d Meters WorldCoordinates
-areaBallInHand =
-    let
-        xOffset =
-            Quantity.half length |> Quantity.minus Ball.radius
-
-        yOffset =
-            Quantity.half width |> Quantity.minus Ball.radius
-    in
-    Rectangle3d.on SketchPlane3d.xy
-        (Rectangle2d.from
-            (Point2d.xy (Quantity.negate xOffset) (Quantity.negate yOffset))
-            (Point2d.xy xOffset yOffset)
-        )
-        |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
-
-
-{-| The foot spot is the place where you “spot the ball”, it is also
-the place where the top object ball is placed when racking a game
--}
-footSpot : Point2d Meters WorldCoordinates
-footSpot =
-    Point2d.xy
-        (Quantity.half (Quantity.half length))
-        Quantity.zero
-
-
-{-| The area where you break from, and where you must place the cue ball after a scratch.
--}
-areaBehindTheHeadString : Rectangle3d Meters WorldCoordinates
-areaBehindTheHeadString =
-    let
-        yOffset =
-            Quantity.half width |> Quantity.minus Ball.radius
-
-        xMin =
-            Quantity.half length |> Quantity.minus Ball.radius |> Quantity.negate
-
-        xMax =
-            Quantity.half (Quantity.half length) |> Quantity.negate
-    in
-    Rectangle3d.on SketchPlane3d.xy
-        (Rectangle2d.from
-            (Point2d.xy xMin (Quantity.negate yOffset))
-            (Point2d.xy xMax yOffset)
-        )
-        |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
-
-
-{-| Highlight the area behind the head string when the ball should be placed there
--}
-areaBehindTheHeadStringEntity : Entity WorldCoordinates
-areaBehindTheHeadStringEntity =
-    case Rectangle3d.vertices areaBehindTheHeadString of
-        [ v1, v2, v3, v4 ] ->
-            Scene3d.quad
-                (Material.nonmetal
-                    { baseColor = Color.rgb255 131 146 34
-                    , roughness = 1
-                    }
-                )
-                v1
-                v2
-                v3
-                v4
-
-        _ ->
-            Scene3d.nothing
-
-
-{-| Load the visual entity and the collider bodies for the table from the obj file and texture files
+{-| Load the table from the obj file and texture files
 -}
 load : { colorTexture : String, roughnessTexture : String, metallicTexture : String, mesh : String } -> Task String Table
 load urls =
@@ -231,3 +153,90 @@ startsWith prefix decoder =
                     |> List.map (\name -> Obj.Decode.object name decoder)
                     |> Obj.Decode.combine
             )
+
+
+
+-- DIMENSIONS
+
+
+length : Length
+length =
+    Length.meters 2.26
+
+
+width : Length
+width =
+    Length.meters 1.24
+
+
+{-| The foot spot is the place where you “spot the ball”, it is also
+the place where the top object ball is placed when racking a game
+-}
+footSpot : Point2d Meters WorldCoordinates
+footSpot =
+    Point2d.xy
+        (Quantity.half (Quantity.half length))
+        Quantity.zero
+
+
+{-| Anywhere on the table. This where the cue ball should be placed after it goes in a pocket
+or after the failure to hit the object ball.
+-}
+areaBallInHand : Rectangle3d Meters WorldCoordinates
+areaBallInHand =
+    let
+        xOffset =
+            Quantity.half length |> Quantity.minus Ball.radius
+
+        yOffset =
+            Quantity.half width |> Quantity.minus Ball.radius
+    in
+    Rectangle3d.on SketchPlane3d.xy
+        (Rectangle2d.from
+            (Point2d.xy (Quantity.negate xOffset) (Quantity.negate yOffset))
+            (Point2d.xy xOffset yOffset)
+        )
+        |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
+
+
+{-| The area where you break from, and where you must place the cue ball after a scratch.
+-}
+areaBehindTheHeadString : Rectangle3d Meters WorldCoordinates
+areaBehindTheHeadString =
+    let
+        yOffset =
+            Quantity.half width |> Quantity.minus Ball.radius
+
+        xMin =
+            Quantity.half length |> Quantity.minus Ball.radius |> Quantity.negate
+
+        xMax =
+            Quantity.half (Quantity.half length) |> Quantity.negate
+    in
+    Rectangle3d.on SketchPlane3d.xy
+        (Rectangle2d.from
+            (Point2d.xy xMin (Quantity.negate yOffset))
+            (Point2d.xy xMax yOffset)
+        )
+        |> Rectangle3d.translateIn Direction3d.z (Length.millimeters 1)
+
+
+{-| Highlight the area behind the head string when the ball should be placed there
+-}
+areaBehindTheHeadStringEntity : Entity WorldCoordinates
+areaBehindTheHeadStringEntity =
+    case Rectangle3d.vertices areaBehindTheHeadString of
+        [ v1, v2, v3, v4 ] ->
+            Scene3d.quad
+                (Material.nonmetal
+                    { baseColor = Color.rgb255 131 146 34
+                    , roughness = 1
+                    }
+                )
+                v1
+                v2
+                v3
+                v4
+
+        _ ->
+            Scene3d.nothing

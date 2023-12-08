@@ -1,17 +1,30 @@
 module Camera exposing
-    ( Camera
-    , ScreenCoordinates
-    , animate
-    , azimuth
-    , camera3d
-    , focusOn
-    , initial
-    , mouseOrbiting
-    , mouseWheelZoom
-    , orbitingPrecision
-    , ray
-    , zoomOut
+    ( ScreenCoordinates, Camera, initial
+    , camera3d, azimuth, orbitingPrecision
+    , ray, mouseOrbiting, mouseWheelZoom
+    , focusOn, zoomOut, animate
     )
+
+{-| Animated 3d camera controls
+
+@docs ScreenCoordinates, Camera, initial
+
+
+# Current state
+
+@docs camera3d, azimuth, orbitingPrecision
+
+
+# Interaction
+
+@docs ray, mouseOrbiting, mouseWheelZoom
+
+
+# Animation
+
+@docs focusOn, zoomOut, animate
+
+-}
 
 import Angle exposing (Angle)
 import Animator exposing (Timeline)
@@ -30,10 +43,13 @@ import Vector2d
 import Viewpoint3d
 
 
+{-| Screen space coordinate system
+-}
 type ScreenCoordinates
     = ScreenCoordinates Never
 
 
+{-| -}
 type Camera
     = Camera
         { zoom : Timeline Float -- also used for orbiting precision
@@ -43,6 +59,8 @@ type Camera
         }
 
 
+{-| Initial look at the table
+-}
 initial : Camera
 initial =
     Camera
@@ -53,26 +71,30 @@ initial =
         }
 
 
-ray :
-    Camera
-    -> Rectangle2d Pixels ScreenCoordinates
-    -> Point2d Pixels ScreenCoordinates
-    -> Axis3d Meters WorldCoordinates
-ray camera =
-    Camera3d.ray (camera3d camera)
+
+-- CURRENT STATE
 
 
+{-| Get the currrent Camera3d for rendering with elm-3d-scene
+-}
 camera3d : Camera -> Camera3d Meters WorldCoordinates
 camera3d (Camera camera) =
     let
         distance =
             Animator.move camera.zoom Animator.at
                 |> Quantity.interpolateFrom (Length.meters 0.5) (Length.meters 6)
+
+        focalPoint =
+            Point3d.fromRecord Length.meters <|
+                Animator.xyz camera.focalPoint
+                    (Point3d.toMeters
+                        >> (\p -> { x = Animator.at p.x, y = Animator.at p.y, z = Animator.at p.z })
+                    )
     in
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.orbit
-                { focalPoint = pointFromTimeline camera.focalPoint
+                { focalPoint = focalPoint
                 , groundPlane = SketchPlane3d.xy
                 , azimuth = camera.azimuth
                 , elevation = angleFromTimeline camera.elevation
@@ -82,30 +104,41 @@ camera3d (Camera camera) =
         }
 
 
+{-| Get the currrent azimuth used for aiming the cue
+-}
 azimuth : Camera -> Angle
 azimuth (Camera camera) =
     camera.azimuth
 
 
-animate : Posix -> Camera -> Camera
-animate time (Camera camera) =
+{-| Make orbiting precision depend on zoom level.
+Controls how much radians correspond to the change in mouse offset.
+-}
+orbitingPrecision : Camera -> Quantity Float (Quantity.Rate Angle.Radians Pixels)
+orbitingPrecision (Camera camera) =
+    Quantity.rate
+        (Angle.radians (0.2 + Animator.move camera.zoom Animator.at / 0.8))
+        (Pixels.pixels (180 / pi))
+
+
+
+-- INTERACTION
+
+
+{-| Get the ray from the camera into the viewplane,
+useful for mouse interactions with the 3d objects
+-}
+ray :
     Camera
-        { camera
-            | elevation = Animator.updateTimeline time camera.elevation
-            , zoom = Animator.updateTimeline time camera.zoom
-            , focalPoint = Animator.updateTimeline time camera.focalPoint
-        }
+    -> Rectangle2d Pixels ScreenCoordinates
+    -> Point2d Pixels ScreenCoordinates
+    -> Axis3d Meters WorldCoordinates
+ray camera =
+    Camera3d.ray (camera3d camera)
 
 
-mouseWheelZoom : Float -> Camera -> Camera
-mouseWheelZoom deltaY (Camera camera) =
-    let
-        newZoom =
-            clamp 0 1 (Animator.move camera.zoom Animator.at - deltaY * 0.002)
-    in
-    Camera { camera | zoom = Animator.go Animator.immediately newZoom camera.zoom }
-
-
+{-| Orbit the camera with mouse
+-}
 mouseOrbiting : Point2d Pixels ScreenCoordinates -> Point2d Pixels ScreenCoordinates -> Camera -> Camera
 mouseOrbiting originalPosition newPosition (Camera camera) =
     let
@@ -134,31 +167,15 @@ mouseOrbiting originalPosition newPosition (Camera camera) =
         }
 
 
-zoomOut : Camera -> Camera
-zoomOut (Camera camera) =
-    Camera
-        { camera
-            | zoom = Animator.go Animator.verySlowly 1 camera.zoom
-            , elevation = Animator.go Animator.verySlowly (Angle.degrees 50) camera.elevation
-        }
-
-
-focusOn : Point3d Meters WorldCoordinates -> Camera -> Camera
-focusOn focalPoint (Camera camera) =
-    Camera
-        { camera
-            | focalPoint = Animator.go Animator.quickly focalPoint camera.focalPoint
-        }
-
-
-{-| Make orbiting precision depend on zoom level.
-Controls how much radians correspond to the change in mouse offset.
+{-| Zoom in/out by mouse wheel delta
 -}
-orbitingPrecision : Camera -> Quantity Float (Quantity.Rate Angle.Radians Pixels)
-orbitingPrecision (Camera camera) =
-    Quantity.rate
-        (Angle.radians (0.2 + Animator.move camera.zoom Animator.at / 0.8))
-        (Pixels.pixels (180 / pi))
+mouseWheelZoom : Float -> Camera -> Camera
+mouseWheelZoom deltaY (Camera camera) =
+    let
+        newZoom =
+            clamp 0 1 (Animator.move camera.zoom Animator.at - deltaY * 0.002)
+    in
+    Camera { camera | zoom = Animator.go Animator.immediately newZoom camera.zoom }
 
 
 {-| Read the angle value from the timeline
@@ -168,12 +185,39 @@ angleFromTimeline angleTimeline =
     Angle.radians (Animator.move angleTimeline (Angle.inRadians >> Animator.at))
 
 
-{-| Read the point value from the timeline
+
+-- ANIMATION
+
+
+{-| Animate the focal point of the camera to the new position
 -}
-pointFromTimeline : Timeline (Point3d Meters WorldCoordinates) -> Point3d Meters WorldCoordinates
-pointFromTimeline pointTimeline =
-    Point3d.fromRecord Length.meters <|
-        Animator.xyz pointTimeline
-            (Point3d.toMeters
-                >> (\p -> { x = Animator.at p.x, y = Animator.at p.y, z = Animator.at p.z })
-            )
+focusOn : Point3d Meters WorldCoordinates -> Camera -> Camera
+focusOn focalPoint (Camera camera) =
+    Camera
+        { camera
+            | focalPoint = Animator.go Animator.quickly focalPoint camera.focalPoint
+        }
+
+
+{-| Zoom out the camera to look over the table from the top
+-}
+zoomOut : Camera -> Camera
+zoomOut (Camera camera) =
+    Camera
+        { camera
+            | zoom = Animator.go Animator.verySlowly 1 camera.zoom
+            , elevation = Animator.go Animator.verySlowly (Angle.degrees 50) camera.elevation
+        }
+
+
+{-| Update the camera animation state, this needs to be called
+from the animation frame subscription
+-}
+animate : Posix -> Camera -> Camera
+animate time (Camera camera) =
+    Camera
+        { camera
+            | elevation = Animator.updateTimeline time camera.elevation
+            , zoom = Animator.updateTimeline time camera.zoom
+            , focalPoint = Animator.updateTimeline time camera.focalPoint
+        }

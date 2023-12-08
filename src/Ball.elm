@@ -16,7 +16,7 @@ import Quantity
 import Scene3d exposing (Entity)
 import Scene3d.Material as Material
 import SketchPlane3d
-import Sphere3d exposing (Sphere3d)
+import Sphere3d
 import Vector3d
 
 
@@ -38,27 +38,21 @@ damping =
     { linear = 0.4, angular = 0.4 }
 
 
-ballMaterial : Material
-ballMaterial =
+material : Material
+material =
     Material.custom
         { friction = 0.06
         , bounciness = 0.6
         }
 
 
-sphere : Sphere3d Meters BodyCoordinates
-sphere =
-    Sphere3d.atOrigin radius
-
-
 body : id -> Body id
 body id =
-    Body.sphere sphere
-        id
-        |> Body.withMaterial ballMaterial
+    Body.sphere (Sphere3d.atOrigin radius) id
+        |> Body.withMaterial material
         |> Body.withDamping damping
         |> Body.withBehavior (Body.dynamic weight)
-        -- rotate to see the numbers
+        -- rotate to see the numbers on the balls
         |> Body.rotateAround Axis3d.x (Angle.degrees 90)
 
 
@@ -71,9 +65,11 @@ entity baseColor roughnessTexture =
             , metallic = Material.constant 0
             }
         )
-        sphere
+        (Sphere3d.atOrigin radius)
 
 
+{-| Rack the balls at the foot spot on the table
+-}
 rack : Point2d Meters WorldCoordinates -> List (Body Id)
 rack footSpot =
     let

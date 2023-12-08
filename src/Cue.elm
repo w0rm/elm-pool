@@ -1,4 +1,11 @@
-module Cue exposing (canShoot, entity)
+module Cue exposing (entity, canShoot)
+
+{-| The cue is reperensented as an `Axis3d Meters WorldCoordinates`
+that points away from the hit point on the cue ball.
+
+@docs entity, canShoot
+
+-}
 
 import Angle
 import Axis3d exposing (Axis3d)
@@ -36,6 +43,9 @@ offset =
     Length.centimeters 2
 
 
+{-| Render the cue as a cylinder, make sure it is trimmed with the end cap
+when interecting with the view plane.
+-}
 entity : Camera3d Meters WorldCoordinates -> Length -> Color -> Axis3d Meters WorldCoordinates -> Entity WorldCoordinates
 entity camera3d clipDepth color axis =
     case cylinder camera3d clipDepth axis of
