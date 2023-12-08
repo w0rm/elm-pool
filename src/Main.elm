@@ -29,7 +29,7 @@ type Model
 type Msg
     = WindowResized (Rectangle2d Pixels ScreenCoordinates)
     | GotBallTexture Int (Result WebGL.Texture.Error (Material.Texture Color))
-    | GotRoughnessTexture (Result WebGL.Texture.Error (Material.Texture Float))
+    | GotBallRoughnessTexture (Result WebGL.Texture.Error (Material.Texture Float))
     | GotTable (Result String Table)
     | RunningMsg Game.Msg
     | StartNewGameButtonClicked
@@ -130,12 +130,12 @@ init unsafeFlags =
                 )
                 (List.range 1 15)
             )
-        , Task.attempt GotRoughnessTexture (Material.load (assetsPath ++ "img/roughness.jpg"))
+        , Task.attempt GotBallRoughnessTexture (Material.load (assetsPath ++ "img/balls/roughness.jpg"))
         , Task.attempt GotTable
             (Table.load
-                { colorTexture = assetsPath ++ "img/billiard-table-color.png"
-                , roughnessTexture = assetsPath ++ "img/billiard-table-roughness.png"
-                , metallicTexture = assetsPath ++ "img/billiard-table-metallic.png"
+                { colorTexture = assetsPath ++ "img/table/color.png"
+                , roughnessTexture = assetsPath ++ "img/table/roughness.png"
+                , metallicTexture = assetsPath ++ "img/table/metallic.png"
                 , mesh = assetsPath ++ "/billiard-table.obj.txt"
                 }
             )
@@ -249,8 +249,8 @@ fontStyle path =
     """
 @font-face {
     font-family: 'Teko';
-    src: url('""" ++ path ++ """assets/Teko-Medium.woff2') format('woff2'),
-        url('""" ++ path ++ """assets/Teko-Medium.woff') format('woff');
+    src: url('""" ++ path ++ """font/Teko-Medium.woff2') format('woff2'),
+        url('""" ++ path ++ """font/Teko-Medium.woff') format('woff');
     font-weight: 500;
     font-style: normal;
     font-display: block;
@@ -282,7 +282,7 @@ update msg model =
                 Err _ ->
                     Failed "Failed to load ball texture"
 
-        ( GotRoughnessTexture maybeTexture, Loading loadingModel ) ->
+        ( GotBallRoughnessTexture maybeTexture, Loading loadingModel ) ->
             case maybeTexture of
                 Ok texture ->
                     loadComplete
