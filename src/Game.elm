@@ -147,12 +147,7 @@ initialWorld table =
             (Acceleration.metersPerSecondSquared 9.80665)
             Direction3d.negativeZ
         |> (\w -> List.foldl World.add w table.bodies)
-        |> (\w ->
-                List.foldl World.add w <|
-                    Ball.rack
-                        Table.footSpot
-                        (EightBall.numberedBall >> Maybe.map Numbered)
-           )
+        |> (\w -> List.foldl World.add w (Ball.rack Table.footSpot))
 
 
 
@@ -283,7 +278,7 @@ update window msg oldModel =
                 { model
                     | state = Simulating [] pool
                     , camera = Camera.zoomOut model.camera
-                    , world = shoot axis startTime model.time (EightBall.isBreak pool) model.world
+                    , world = shoot axis startTime model.time model.world
                 }
 
             else
@@ -537,8 +532,8 @@ cueAxis ballPosition cameraAzimuth { hitTarget, cueElevation } =
 {-| Apply impulse to the cue ball depending on the shooting strength.
 The strength is calculated based on how long the spacebar has been pressed.
 -}
-shoot : Axis3d Meters WorldCoordinates -> Posix -> Posix -> Bool -> World Id -> World Id
-shoot axis startTime endTime isBreak =
+shoot : Axis3d Meters WorldCoordinates -> Posix -> Posix -> World Id -> World Id
+shoot axis startTime endTime =
     World.update
         (\body ->
             if Body.data body == CueBall then
@@ -549,13 +544,7 @@ shoot axis startTime endTime isBreak =
                     force =
                         Quantity.interpolateFrom
                             (Force.newtons 10)
-                            (if isBreak then
-                                -- Make break a bit stronger
-                                Force.newtons 90
-
-                             else
-                                Force.newtons 60
-                            )
+                            (Force.newtons 60)
                             (shootingStrength startTime endTime)
                 in
                 Body.applyImpulse
@@ -785,9 +774,9 @@ view ballTextures roughnessTexture table window model =
 
         lamp n =
             Scene3d.Light.point Scene3d.Light.neverCastsShadows
-                { position = Point3d.xyz (Length.meters ((n - 2) * 0.8)) Quantity.zero (Length.meters 0.5)
+                { position = Point3d.xyz (Length.meters ((n - 2) * 0.8)) Quantity.zero (Length.meters 0.4)
                 , chromaticity = Scene3d.Light.fluorescent
-                , intensity = LuminousFlux.lumens 2000
+                , intensity = LuminousFlux.lumens 2500
                 }
 
         environmentalLighting =
@@ -900,8 +889,6 @@ bodyToEntity roughnessTexture ballTextures table body =
                             |> Maybe.withDefault (Material.constant Color.black)
                 in
                 Ball.entity baseColor roughnessTexture
-                    -- rotate to see the numbers
-                    |> Scene3d.rotateAround Axis3d.x (Angle.degrees 90)
 
             CueBall ->
                 Ball.entity (Material.constant Color.white) roughnessTexture

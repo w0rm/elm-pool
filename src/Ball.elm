@@ -1,6 +1,10 @@
 module Ball exposing (body, entity, rack, radius)
 
+import Angle
+import Axis3d
+import Bodies exposing (Id(..))
 import Color exposing (Color)
+import EightBall
 import Length exposing (Length, Meters)
 import Mass exposing (Mass)
 import Physics.Body as Body exposing (Body)
@@ -54,6 +58,8 @@ body id =
         |> Body.withMaterial ballMaterial
         |> Body.withDamping damping
         |> Body.withBehavior (Body.dynamic weight)
+        -- rotate to see the numbers
+        |> Body.rotateAround Axis3d.x (Angle.degrees 90)
 
 
 entity : Material.Texture Color -> Material.Texture Float -> Entity BodyCoordinates
@@ -68,8 +74,8 @@ entity baseColor roughnessTexture =
         sphere
 
 
-rack : Point2d Meters WorldCoordinates -> (Int -> Maybe id) -> List (Body id)
-rack footSpot fn =
+rack : Point2d Meters WorldCoordinates -> List (Body Id)
+rack footSpot =
     let
         -- TODO: randomly shuffle the balls?
         numbers =
@@ -105,7 +111,7 @@ rack footSpot fn =
                             |> Point3d.on SketchPlane3d.xy
                             |> Point3d.translateBy offset
                 in
-                ( fn number, position )
+                ( EightBall.numberedBall number |> Maybe.map Numbered, position )
             )
         |> List.filterMap
             (\( maybeId, pos ) ->
