@@ -302,12 +302,20 @@ update window msg oldModel =
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
 
-                Stop (EightBall.PlayersFault newPool) ->
+                Stop (EightBall.PlayersFault (EightBall.PlaceBallInHand newPool)) ->
                     { model
                         | world = World.keepIf (\b -> Body.data b /= CueBall) model.world
                         , state = PlacingBall OutsideOfTable (Anywhere newPool)
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
+
+                Stop (EightBall.PlayersFault (EightBall.SpotEightBall newPool)) ->
+                    -- { model
+                    --     | world = World.keepIf (\b -> Body.data b /= CueBall) model.world
+                    --     , state = PlacingBall OutsideOfTable (Anywhere newPool)
+                    --     , camera = Camera.focusOn Point3d.origin model.camera
+                    -- }
+                    Debug.todo "Handle spot"
 
                 Stop (EightBall.NextShot newPool) ->
                     let
