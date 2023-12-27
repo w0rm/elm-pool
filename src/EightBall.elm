@@ -601,8 +601,7 @@ scratch when =
 -}
 type WhatHappened
     = IllegalBreak (Pool AwaitingRack)
-    | PlayersFault NextPlayerAction --SpotEightBall
-      -- | PlayersFaultSpotEight (Pool AwaitingPlaceBallInHand)
+    | PlayersFault NextPlayerAction
     | NextShot (Pool AwaitingPlayerShot)
     | GameOver (Pool AwaitingStart) { winner : Player }
 
