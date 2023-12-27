@@ -608,7 +608,7 @@ type WhatHappened
 
 type NextPlayerAction
     = SpotEightBall (Pool AwaitingSpotEightBall)
-      -- | ChooseNextAction (List NextPlayerAction)
+      -- | ChooseNextAction NextPlayerAction NextPlayerAction (List NextPlayerAction)
     | PlaceBallInHand (Pool AwaitingPlaceBallInHand)
 
 
