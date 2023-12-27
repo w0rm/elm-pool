@@ -1036,7 +1036,7 @@ suite =
                     )
                 ]
             , describe "ballOffTable"
-                [ test "when player hits a non-8-ball off the table, the next player must place ball in hand before continuing to shoot"
+                [ test "when player hits a non-8-ball off the table on the break, the next player must place ball in hand before continuing to shoot"
                     (\_ ->
                         let
                             nextAction =
@@ -1047,6 +1047,33 @@ suite =
                                         [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
                                         , EightBall.ballOffTable (Time.millisToPosix 2) EightBall.oneBall
                                         , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.thirteenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
+                                pool
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal EightBall.Player2
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "when player hits a non-8-ball off the table after the break, the next player must place ball in hand before continuing to shoot"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.thirteenBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballOffTable (Time.millisToPosix 2) EightBall.oneBall
                                         ]
                         in
                         case nextAction of

@@ -1058,6 +1058,21 @@ eightBallOffTableEvent ( _, shotEvent ) =
             False
 
 
+nonEightBallOffTable : List ( Time.Posix, ShotEvent ) -> Bool
+nonEightBallOffTable shotEvents =
+    List.any nonEightBallOffTableEvent shotEvents
+
+
+nonEightBallOffTableEvent : ( Time.Posix, ShotEvent ) -> Bool
+nonEightBallOffTableEvent ( _, shotEvent ) =
+    case shotEvent of
+        BallOffTable ball ->
+            ball /= eightBall
+
+        _ ->
+            False
+
+
 checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> CurrentTarget -> PoolData -> WhatHappened
 checkShot shotEvents ballPocketedEvents previousTarget poolData =
     if ballPocketedEvents.eightBallPocketed then
@@ -1080,7 +1095,11 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                 GameOver (endGame (Pool poolData))
                     { winner = switchPlayer poolData.player }
 
-    else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
+    else if
+        ballPocketedEvents.scratched
+            || not (isLegalHit shotEvents previousTarget)
+            || nonEightBallOffTable shotEvents
+    then
         PlayersFault <|
             PlaceBallInHand <|
                 Pool
