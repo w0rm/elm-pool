@@ -1075,13 +1075,20 @@ nonEightBallOffTableEvent ( _, shotEvent ) =
 
 checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> CurrentTarget -> PoolData -> WhatHappened
 checkShot shotEvents ballPocketedEvents previousTarget poolData =
-    if ballPocketedEvents.eightBallPocketed then
+    if
+        ballPocketedEvents.eightBallPocketed
+            || eightBallOffTable shotEvents
+    then
         case currentTarget (Pool poolData) of
             EightBall ->
                 -- TODO: Combine case into tuple with new type `Scratched | NotScratched`.
                 let
                     winningPlayer =
-                        if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
+                        if
+                            ballPocketedEvents.scratched
+                                || not (isLegalHit shotEvents previousTarget)
+                                || eightBallOffTable shotEvents
+                        then
                             switchPlayer poolData.player
 
                         else
