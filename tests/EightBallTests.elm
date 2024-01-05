@@ -117,7 +117,7 @@ suite =
                                     |> andKeepShooting []
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> EightBall.currentPlayer
                                     |> Expect.equal EightBall.Player2
@@ -172,7 +172,7 @@ suite =
                                     |> andKeepShooting []
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> EightBall.currentPlayer
                                     |> Expect.equal EightBall.Player1
@@ -270,7 +270,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentTarget >> Expect.equal EightBall.OpenTable
@@ -743,7 +743,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
@@ -773,7 +773,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
@@ -828,7 +828,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal EightBall.Player1
@@ -855,7 +855,7 @@ suite =
                                     |> andKeepShooting []
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
@@ -886,7 +886,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
@@ -915,7 +915,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> Expect.all
                                         [ EightBall.currentPlayer >> Expect.equal EightBall.Player2
@@ -1000,7 +1000,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> EightBall.currentPlayer
                                     |> Expect.equal EightBall.Player2
@@ -1023,7 +1023,7 @@ suite =
                                         ]
                         in
                         case nextAction of
-                            EightBall.PlayersFault pool ->
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
                                 pool
                                     |> EightBall.placeBallInHand (Time.millisToPosix 800)
                                     |> EightBall.currentPlayer
@@ -1032,6 +1032,113 @@ suite =
                             other ->
                                 Expect.fail <|
                                     "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                ]
+            , describe "ballOffTable"
+                [ test "when player hits a non-8-ball off the table on the break, the next player must place ball in hand before continuing to shoot"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballOffTable (Time.millisToPosix 2) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.thirteenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
+                                pool
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal EightBall.Player2
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "when player hits a non-8-ball off the table after the break, the next player must place ball in hand before continuing to shoot"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.thirteenBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballOffTable (Time.millisToPosix 2) EightBall.oneBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
+                                pool
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal EightBall.Player2
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "when player hits the 8-ball off the table on the break, the 8-ball is spotted and the next player must place ball in hand before continuing to shoot"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballOffTable (Time.millisToPosix 2) EightBall.eightBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.thirteenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.PlayersFault (EightBall.SpotEightBall pool) ->
+                                pool
+                                    |> EightBall.currentPlayer
+                                    |> Expect.equal EightBall.Player2
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.PlayersFault, but found this instead:\n"
+                                        ++ Debug.toString other
+                    )
+                , test "when player hits the 8-ball off the table AFTER the break, the player loses"
+                    (\_ ->
+                        let
+                            nextAction =
+                                EightBall.start
+                                    |> EightBall.rack (Time.millisToPosix 0)
+                                    |> EightBall.placeBallBehindHeadstring (Time.millisToPosix 0)
+                                    |> EightBall.playerShot
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.oneBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 1) EightBall.oneBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.cueHitBall (Time.millisToPosix 1) EightBall.twoBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 2) EightBall.threeBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.fiveBall
+                                        ]
+                                    |> andKeepShooting
+                                        [ EightBall.ballOffTable (Time.millisToPosix 2) EightBall.eightBall
+                                        , EightBall.ballFellInPocket (Time.millisToPosix 3) EightBall.thirteenBall
+                                        ]
+                        in
+                        case nextAction of
+                            EightBall.GameOver _ { winner } ->
+                                Expect.equal winner EightBall.Player2
+
+                            other ->
+                                Expect.fail <|
+                                    "Should be EightBall.GameOver, but found this instead:\n"
                                         ++ Debug.toString other
                     )
                 ]
@@ -1055,9 +1162,15 @@ andKeepShooting shotEvents ruling =
         EightBall.NextShot pool ->
             EightBall.playerShot shotEvents pool
 
-        EightBall.PlayersFault pool ->
+        EightBall.PlayersFault (EightBall.PlaceBallInHand pool) ->
             pool
                 |> EightBall.placeBallInHand lastEventTime
+                |> EightBall.playerShot shotEvents
+
+        EightBall.PlayersFault (EightBall.SpotEightBall pool) ->
+            pool
+                |> EightBall.spotEightBall lastEventTime
+                |> EightBall.placeBallBehindHeadstring lastEventTime
                 |> EightBall.playerShot shotEvents
 
         EightBall.GameOver _ _ ->
