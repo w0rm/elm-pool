@@ -22,7 +22,7 @@ import Cue
 import Dict exposing (Dict)
 import Direction3d
 import Duration
-import EightBall exposing (Ball, Player, Pool, ShotEvent)
+import EightBall exposing (Player, Pool, ShotEvent)
 import Force
 import Frame3d
 import Html exposing (Html)
@@ -162,7 +162,6 @@ type Msg
     | MouseUp
     | ShootPressed
     | ShootReleased
-    | Spawn Ball
 
 
 update : Rectangle2d Pixels ScreenCoordinates -> Msg -> Model -> Model
@@ -340,9 +339,6 @@ update window msg oldModel =
         -- by intercepting the MouseDown event
         ( _, MouseDown mousePosition ) ->
             { model | orbiting = Just mousePosition }
-
-        ( _, Spawn b ) ->
-            { model | world = Ball.spot Table.footSpot b model.world }
 
         _ ->
             model
@@ -1076,11 +1072,6 @@ decodeKey msg =
                 Json.Decode.succeed msg
 
             else
-                case String.toInt key |> Maybe.andThen EightBall.numberedBall of
-                    Just n ->
-                        Json.Decode.succeed (Spawn n)
-
-                    _ ->
-                        Json.Decode.fail ""
+                Json.Decode.fail ""
         )
         (Json.Decode.field "key" Json.Decode.string)
