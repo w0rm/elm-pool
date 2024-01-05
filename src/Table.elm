@@ -101,10 +101,13 @@ tableDecoder =
                 mesh =
                     Scene3d.Mesh.texturedFaces visual
 
+                height =
+                    0.75
+
                 bodies =
                     [ Body.plane Floor
                         -- distance from the floor until the top of the table
-                        |> Body.moveTo (Point3d.meters 0 0 -0.45)
+                        |> Body.moveTo (Point3d.meters 0 0 -height)
                     , Body.compound (List.map Shape.unsafeConvex tableConvexes) Bodies.Table
                         |> Body.withMaterial
                             (Physics.Material.custom
@@ -130,17 +133,24 @@ tableDecoder =
                         , -- floor
                           Scene3d.quad
                             (Material.matte (Color.rgb255 46 52 54))
-                            (Point3d.meters -15 -15 -0.45)
-                            (Point3d.meters 15 -15 -0.45)
-                            (Point3d.meters 15 15 -0.45)
-                            (Point3d.meters -15 15 -0.45)
+                            (Point3d.meters -15 -15 -height)
+                            (Point3d.meters 15 -15 -height)
+                            (Point3d.meters 15 15 -height)
+                            (Point3d.meters -15 15 -height)
                         ]
                 }
         )
         (startsWith "Table-" (Obj.Decode.trianglesIn Frame3d.atOrigin))
         (startsWith "Cushions-" (Obj.Decode.trianglesIn Frame3d.atOrigin))
         (Obj.Decode.object "Pockets" (Obj.Decode.trianglesIn Frame3d.atOrigin))
-        (Obj.Decode.object "Billiard-Table" (Obj.Decode.texturedFacesIn Frame3d.atOrigin))
+        (Obj.Decode.filter
+            (\{ object } ->
+                object
+                    |> Maybe.map (String.startsWith "Billiard-")
+                    |> Maybe.withDefault False
+            )
+            (Obj.Decode.texturedFacesIn Frame3d.atOrigin)
+        )
 
 
 startsWith : String -> Decoder a -> Decoder (List a)
