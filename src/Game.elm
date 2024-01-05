@@ -311,12 +311,14 @@ update window msg oldModel =
                     }
 
                 Stop (EightBall.PlayersFault (EightBall.SpotEightBall newPool)) ->
-                    -- { model
-                    --     | world = World.keepIf (\b -> Body.data b /= CueBall) model.world
-                    --     , state = PlacingBall OutsideOfTable (Anywhere newPool)
-                    --     , camera = Camera.focusOn Point3d.origin model.camera
-                    -- }
-                    Debug.todo "Handle spot"
+                    { model
+                        | world =
+                            model.world
+                                |> World.keepIf (\b -> Body.data b /= CueBall)
+                                |> Ball.spot Table.footSpot EightBall.eightBall
+                        , state = PlacingBall OutsideOfTable (BehindHeadString (EightBall.spotEightBall time newPool))
+                        , camera = Camera.focusOn Point3d.origin model.camera
+                    }
 
                 Stop (EightBall.NextShot newPool) ->
                     let
@@ -648,15 +650,13 @@ simulateWithEvents frame time world events =
                                 , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
                                 )
 
-                            -- TODO: implement “spotted” balls. When a numbered ball falls off the table,
-                            -- it has to be placed on the foot spot
                             ( Numbered ball, Floor ) ->
-                                ( EightBall.ballFellInPocket time ball :: currentEvents
+                                ( EightBall.ballOffTable time ball :: currentEvents
                                 , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
                                 )
 
                             ( Floor, Numbered ball ) ->
-                                ( EightBall.ballFellInPocket time ball :: currentEvents
+                                ( EightBall.ballOffTable time ball :: currentEvents
                                 , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
                                 )
 
