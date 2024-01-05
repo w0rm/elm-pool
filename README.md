@@ -54,7 +54,7 @@ The game format is two (2) player 8-Ball. It is a simplified version of [WPA 8-B
   5. On scratch, require the next player to place the cue ball anywhere on the table (ball-in-hand) ✅
   6. If a player does not pocket one of their balls or scratches, the current player switches ✅
   7. Ensure balls are pocketed only once or send an error
-  8. Support "spotted" balls when the numbered balls fall off the table
+  8. Support spotting 8 ball when it falls off the table during break ✅
 
 - Winning the game
 
