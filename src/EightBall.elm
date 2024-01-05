@@ -2,11 +2,11 @@ module EightBall exposing
     ( Pool, start, AwaitingRack, AwaitingPlayerShot, AwaitingPlaceBallInHand, AwaitingPlaceBallBehindHeadstring, AwaitingStart
     , Player(..), currentPlayer, currentScore
     , CurrentTarget(..), currentTarget
-    , rack, placeBallBehindHeadstring, placeBallInHand, playerShot
+    , rack, placeBallBehindHeadstring, placeBallInHand, playerShot, spotEightBall
     , ShotEvent
-    , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
+    , cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, ballOffTable, scratch
     , Ball, oneBall, twoBall, threeBall, fourBall, fiveBall, sixBall, sevenBall, eightBall, nineBall, tenBall, elevenBall, twelveBall, thirteenBall, fourteenBall, fifteenBall, numberedBall, ballNumber
-    , WhatHappened(..)
+    , WhatHappened(..), NextPlayerAction(..)
     )
 
 {-| Pool game rules. Agnostic to game engine.
@@ -35,13 +35,13 @@ module EightBall exposing
 
 # Update
 
-@docs rack, placeBallBehindHeadstring, placeBallInHand, playerShot
+@docs rack, placeBallBehindHeadstring, placeBallInHand, playerShot, spotEightBall
 
 
 ## Shot Events
 
 @docs ShotEvent
-@docs cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, scratch
+@docs cueHitBall, cueHitWall, ballFellInPocket, ballHitWall, ballOffTable, scratch
 
 
 ## Balls
@@ -51,7 +51,7 @@ module EightBall exposing
 
 ## Ruling
 
-@docs WhatHappened
+@docs WhatHappened, NextPlayerAction
 
 -}
 
@@ -400,6 +400,19 @@ type AwaitingPlaceBallBehindHeadstring
     = AwaitingPlaceBallBehindHeadstring Never
 
 
+{-| When a player knocks the eight (8) ball off the table on the break, the 8-ball must be spotted before the next player places ball-in-hand.
+
+From WPA [rules 3.7 Spotting Balls](https://wpapool.com/rules-of-play/#eight-ball)
+
+> If the eight ball is pocketed or driven off the table on the break, it will be spotted or the balls
+> will be re-racked. (See 3.3 Break Shot and 1.4 Spotting Balls.) No other object ball is ever
+> spotted.
+
+-}
+type AwaitingSpotEightBall
+    = AwaitingSpotEightBall Never
+
+
 {-| When the game is over, start a new game to play again.
 -}
 type AwaitingStart
@@ -426,6 +439,7 @@ type InternalEvent
       -- Player actions
     | BallPlacedBehindHeadString
     | BallPlacedInHand
+    | EightBallSpotted
       -- | CallShot Ball Pocket
     | Shot (List ( Time.Posix, ShotEvent ))
       -- Game over
@@ -434,17 +448,15 @@ type InternalEvent
 
 {-| All potential shot events available.
 
-There are a few which should be supported, but are not yet:
+There is one which should be supported, but is not yet:
 
-  - BallOffTable
   - BallToBall
-  - BallToWall
 
 -}
 type ShotEvent
-    = --       -- | BallOffTable Ball
+    = BallOffTable Ball
       -- BallToBall Ball Ball (List Ball)
-      BallToPocket Ball --Pocket
+    | BallToPocket Ball --Pocket
     | BallToWall Ball -- Wall
     | CueHitBall Ball
     | CueHitWall
@@ -476,6 +488,21 @@ placeBallInHand when (Pool data) =
                 data.events
                     ++ [ { when = when
                          , event = BallPlacedInHand
+                         }
+                       ]
+        }
+
+
+{-| When the 8-ball is spotted.
+-}
+spotEightBall : Time.Posix -> Pool AwaitingSpotEightBall -> Pool AwaitingPlaceBallBehindHeadstring
+spotEightBall when (Pool data) =
+    Pool
+        { data
+            | events =
+                data.events
+                    ++ [ { when = when
+                         , event = EightBallSpotted
                          }
                        ]
         }
@@ -539,6 +566,15 @@ ballFellInPocket when ball =
     )
 
 
+{-| When a ball is knocked off the table.
+-}
+ballOffTable : Time.Posix -> Ball -> ( Time.Posix, ShotEvent )
+ballOffTable when ball =
+    ( when
+    , BallOffTable ball
+    )
+
+
 {-| When the cue ball is pocketed.
 
 [WPA Rules 8.6](https://wpapool.com/rules-of-play/#86Scratch)
@@ -565,9 +601,15 @@ scratch when =
 -}
 type WhatHappened
     = IllegalBreak (Pool AwaitingRack)
-    | PlayersFault (Pool AwaitingPlaceBallInHand)
+    | PlayersFault NextPlayerAction
     | NextShot (Pool AwaitingPlayerShot)
     | GameOver (Pool AwaitingStart) { winner : Player }
+
+
+type NextPlayerAction
+    = SpotEightBall (Pool AwaitingSpotEightBall)
+      -- | ChooseNextAction NextPlayerAction NextPlayerAction (List NextPlayerAction)
+    | PlaceBallInHand (Pool AwaitingPlaceBallInHand)
 
 
 {-| Set game over via this function so we don't forget to add the internal event.
@@ -604,6 +646,11 @@ playerShot shotEvents (Pool data) =
             playerRegularShot shotEvents data
 
         Just BallPlacedInHand ->
+            playerRegularShot shotEvents data
+
+        Just EightBallSpotted ->
+            -- Error "The cue ball must be placed behind the headstring. The API should not allow this."
+            -- Make an assumption for now since we do not handle errors well in the game.
             playerRegularShot shotEvents data
 
         Just (Shot _) ->
@@ -643,6 +690,21 @@ playerBreak shotEvents data =
                             |> List.sortWith eventTimeComparison
                 }
 
+    else if eightBallOffTable shotEvents then
+        PlayersFault <|
+            SpotEightBall <|
+                Pool
+                    { data
+                        | player = switchPlayer data.player
+                        , events =
+                            data.events
+                                ++ [ { event = Shot shotEvents
+                                     , when = lastEventTime data.events
+                                     }
+                                   ]
+                                |> List.sortWith eventTimeComparison
+                    }
+
     else
         -- We can assume the regular shot rules will apply because there are no incongruities.
         playerRegularShot shotEvents data
@@ -653,6 +715,9 @@ numberOfBallsHitWall =
     List.filterMap
         (\( _, shotEvent ) ->
             case shotEvent of
+                BallOffTable _ ->
+                    Nothing
+
                 BallToPocket _ ->
                     Nothing
 
@@ -678,17 +743,18 @@ playerRegularShot shotEvents data =
         [] ->
             -- Assume the cue is struck, but no other balls are hit.
             PlayersFault <|
-                Pool
-                    { data
-                        | player = switchPlayer data.player
-                        , events =
-                            data.events
-                                ++ [ { event = Shot []
-                                     , when = lastEventTime data.events
-                                     }
-                                   ]
-                                |> List.sortWith eventTimeComparison
-                    }
+                PlaceBallInHand <|
+                    Pool
+                        { data
+                            | player = switchPlayer data.player
+                            , events =
+                                data.events
+                                    ++ [ { event = Shot []
+                                         , when = lastEventTime data.events
+                                         }
+                                       ]
+                                    |> List.sortWith eventTimeComparison
+                        }
 
         ( firstShotTime, _ ) :: _ ->
             let
@@ -797,6 +863,9 @@ groupPocketedEvents shotEvents =
             List.filter
                 (\( _, shotEvent ) ->
                     case shotEvent of
+                        BallOffTable _ ->
+                            False
+
                         BallToPocket _ ->
                             True
 
@@ -818,6 +887,9 @@ groupPocketedEvents shotEvents =
             List.any
                 (\( _, shotEvent ) ->
                     case shotEvent of
+                        BallOffTable _ ->
+                            False
+
                         BallToPocket _ ->
                             False
 
@@ -878,6 +950,9 @@ ballGroup (Ball _ group) =
 ballPocketedInGroup : BallGroup -> ( Time.Posix, ShotEvent ) -> Bool
 ballPocketedInGroup ballGroup_ ( _, shotEvent ) =
     case shotEvent of
+        BallOffTable _ ->
+            False
+
         BallToPocket ball ->
             ballGroup ball == ballGroup_
 
@@ -948,6 +1023,9 @@ legalFirstBallHitGroup shotEvents =
 hasHitAWallOrPocket : ( Time.Posix, ShotEvent ) -> Bool
 hasHitAWallOrPocket ( _, shotEvent ) =
     case shotEvent of
+        BallOffTable _ ->
+            False
+
         CueHitBall _ ->
             False
 
@@ -964,15 +1042,52 @@ hasHitAWallOrPocket ( _, shotEvent ) =
             False
 
 
+eightBallOffTable : List ( Time.Posix, ShotEvent ) -> Bool
+eightBallOffTable shotEvents =
+    List.any eightBallOffTableEvent shotEvents
+
+
+eightBallOffTableEvent : ( Time.Posix, ShotEvent ) -> Bool
+eightBallOffTableEvent ( _, shotEvent ) =
+    case shotEvent of
+        BallOffTable ball ->
+            ball == eightBall
+
+        _ ->
+            False
+
+
+nonEightBallOffTable : List ( Time.Posix, ShotEvent ) -> Bool
+nonEightBallOffTable shotEvents =
+    List.any nonEightBallOffTableEvent shotEvents
+
+
+nonEightBallOffTableEvent : ( Time.Posix, ShotEvent ) -> Bool
+nonEightBallOffTableEvent ( _, shotEvent ) =
+    case shotEvent of
+        BallOffTable ball ->
+            ball /= eightBall
+
+        _ ->
+            False
+
+
 checkShot : List ( Time.Posix, ShotEvent ) -> BallPocketedEvents -> CurrentTarget -> PoolData -> WhatHappened
 checkShot shotEvents ballPocketedEvents previousTarget poolData =
-    if ballPocketedEvents.eightBallPocketed then
+    if
+        ballPocketedEvents.eightBallPocketed
+            || eightBallOffTable shotEvents
+    then
         case currentTarget (Pool poolData) of
             EightBall ->
                 -- TODO: Combine case into tuple with new type `Scratched | NotScratched`.
                 let
                     winningPlayer =
-                        if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
+                        if
+                            ballPocketedEvents.scratched
+                                || not (isLegalHit shotEvents previousTarget)
+                                || eightBallOffTable shotEvents
+                        then
                             switchPlayer poolData.player
 
                         else
@@ -986,16 +1101,20 @@ checkShot shotEvents ballPocketedEvents previousTarget poolData =
                 GameOver (endGame (Pool poolData))
                     { winner = switchPlayer poolData.player }
 
-    else if ballPocketedEvents.scratched || not (isLegalHit shotEvents previousTarget) then
-        PlayersFault
-            (Pool
-                { poolData
-                    | player = switchPlayer poolData.player
+    else if
+        ballPocketedEvents.scratched
+            || not (isLegalHit shotEvents previousTarget)
+            || nonEightBallOffTable shotEvents
+    then
+        PlayersFault <|
+            PlaceBallInHand <|
+                Pool
+                    { poolData
+                        | player = switchPlayer poolData.player
 
-                    -- TODO: Log Scratched/PlayersFault internal event.
-                    -- Should these be two separate events?
-                }
-            )
+                        -- TODO: Log Scratched/PlayersFault internal event.
+                        -- Should these be two separate events?
+                    }
 
     else
         NextShot <|
@@ -1104,6 +1223,9 @@ lastEventTimeByEventType eventData =
             Just eventData.when
 
         BallPlacedInHand ->
+            Just eventData.when
+
+        EightBallSpotted ->
             Just eventData.when
 
         GameOver_ ->
