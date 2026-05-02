@@ -31,7 +31,7 @@ import Animator exposing (Timeline)
 import Axis3d exposing (Axis3d)
 import Camera3d exposing (Camera3d)
 import Length exposing (Meters)
-import Physics.Coordinates exposing (WorldCoordinates)
+import Physics exposing (WorldCoordinates)
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
@@ -40,7 +40,6 @@ import Rectangle2d exposing (Rectangle2d)
 import SketchPlane3d
 import Time exposing (Posix)
 import Vector2d
-import Viewpoint3d
 
 
 {-| Screen space coordinate system
@@ -91,16 +90,14 @@ camera3d (Camera camera) =
                         >> (\p -> { x = Animator.at p.x, y = Animator.at p.y, z = Animator.at p.z })
                     )
     in
-    Camera3d.perspective
-        { viewpoint =
-            Viewpoint3d.orbit
-                { focalPoint = focalPoint
-                , groundPlane = SketchPlane3d.xy
-                , azimuth = camera.azimuth
-                , elevation = angleFromTimeline camera.elevation
-                , distance = distance
-                }
-        , verticalFieldOfView = Angle.degrees 24
+    Camera3d.orbit
+        { focalPoint = focalPoint
+        , groundPlane = SketchPlane3d.xy
+        , azimuth = camera.azimuth
+        , elevation = angleFromTimeline camera.elevation
+        , distance = distance
+        , projection = Camera3d.Perspective
+        , fov = Camera3d.angle (Angle.degrees 24)
         }
 
 

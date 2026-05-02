@@ -15,15 +15,12 @@ import Color exposing (Color)
 import Cylinder3d exposing (Cylinder3d)
 import Direction3d
 import Length exposing (Length, Meters)
-import Physics.Body as Body
-import Physics.Coordinates exposing (WorldCoordinates)
-import Physics.World as World exposing (World)
+import Physics exposing (Body, WorldCoordinates)
+import Plane3d
 import Point3d
 import Quantity
 import Scene3d exposing (Entity)
 import Scene3d.Material as Material
-import SketchPlane3d
-import Viewpoint3d
 
 
 length : Length
@@ -66,10 +63,9 @@ cylinder : Camera3d Meters WorldCoordinates -> Length -> Axis3d Meters WorldCoor
 cylinder camera3d clipDepth axis =
     let
         viewPlane =
-            camera3d
-                |> Camera3d.viewpoint
-                |> Viewpoint3d.viewPlane
-                |> SketchPlane3d.toPlane
+            Plane3d.through
+                (Camera3d.eyePoint camera3d)
+                (Camera3d.viewDirection camera3d)
 
         trimmedCueLength =
             -- shorten the cue cylinder if intersects with the view plane
@@ -99,8 +95,8 @@ cylinder camera3d clipDepth axis =
 
 {-| Check if the cue doesn't overlap with any other objects
 -}
-canShoot : World Id -> Axis3d Meters WorldCoordinates -> Bool
-canShoot world axis =
+canShoot : List ( Id, Body ) -> Axis3d Meters WorldCoordinates -> Bool
+canShoot bodies axis =
     let
         direction =
             Axis3d.direction axis
@@ -114,8 +110,8 @@ canShoot world axis =
                 (Axis3d.originPoint axis)
 
         -- ignore collision with the cue ball
-        worldWithoutCueBall =
-            World.keepIf (\b -> Body.data b /= CueBall) world
+        bodiesWithoutCueBall =
+            List.filter (\( id, _ ) -> id /= CueBall) bodies
     in
     -- cast 8 rays along the surface of the cue cylinder
     List.all
@@ -128,15 +124,11 @@ canShoot world axis =
                 cueRay =
                     Axis3d.through rotatedPoint direction
             in
-            case World.raycast cueRay worldWithoutCueBall of
-                Just { point, body } ->
-                    let
-                        collisionPoint =
-                            point |> Point3d.placeIn (Body.frame body)
-                    in
+            case Physics.raycast cueRay bodiesWithoutCueBall of
+                Just ( _, _, { point } ) ->
                     -- if the distance is greater than the cue length + offset, then there is no overlap
                     rotatedPoint
-                        |> Point3d.distanceFrom collisionPoint
+                        |> Point3d.distanceFrom point
                         |> Quantity.greaterThan (Quantity.plus offset length)
 
                 Nothing ->
