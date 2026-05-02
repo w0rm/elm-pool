@@ -10,7 +10,6 @@ module Game exposing
     , view
     )
 
-import Acceleration
 import Angle exposing (Angle)
 import Axis3d exposing (Axis3d)
 import Ball
@@ -33,10 +32,7 @@ import Json.Decode
 import Length exposing (Meters)
 import List
 import LuminousFlux
-import Physics.Body as Body exposing (Body)
-import Physics.Contact as Contact
-import Physics.Coordinates exposing (WorldCoordinates)
-import Physics.World as World exposing (World)
+import Physics exposing (Body, WorldCoordinates, onEarth)
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
@@ -61,7 +57,8 @@ import Vector3d
 
 type alias Model =
     { time : Posix
-    , world : World Id
+    , bodies : List ( Id, Body )
+    , contacts : Physics.Contacts Id
     , state : State
     , camera : Camera
     , table : Table
@@ -131,7 +128,8 @@ initial table =
             -- TODO: consider getting the initial time
             Time.millisToPosix 0
     in
-    { world = initialWorld table
+    { bodies = initialBodies table
+    , contacts = Physics.emptyContacts
     , time = time
     , table = table
     , camera = Camera.initial
@@ -140,14 +138,14 @@ initial table =
     }
 
 
-initialWorld : Table -> World Id
-initialWorld table =
-    World.empty
-        |> World.withGravity
-            (Acceleration.metersPerSecondSquared 9.80665)
-            Direction3d.negativeZ
-        |> (\w -> List.foldl World.add w table.bodies)
-        |> (\w -> List.foldl World.add w (Ball.rack Table.footSpot))
+initialBodies : Table -> List ( Id, Body )
+initialBodies table =
+    table.bodies ++ Ball.rack Table.footSpot
+
+
+simulationConfig : Physics.Contacts Id -> Physics.Config Id
+simulationConfig contacts =
+    { onEarth | duration = Duration.seconds (1 / 120), contacts = contacts }
 
 
 
@@ -186,7 +184,7 @@ update window msg oldModel =
                     Camera.ray model.camera window mousePosition
 
                 newBallInHand =
-                    placeBallInHand mouseRay placingArea model.world
+                    placeBallInHand mouseRay placingArea model.bodies
             in
             { model | state = PlacingBall newBallInHand pool }
 
@@ -203,7 +201,7 @@ update window msg oldModel =
             in
             { model
                 | state = Shooting (TargetingCueBall Nothing) initialShot newPool
-                , world = World.add (Body.moveTo position (Ball.body CueBall)) model.world
+                , bodies = ( CueBall, Ball.body |> Physics.moveTo position ) :: model.bodies
                 , camera = Camera.focusOn position model.camera
             }
 
@@ -219,7 +217,7 @@ update window msg oldModel =
                     Camera.ray model.camera window mousePosition
 
                 hitTarget =
-                    targetCueBall mouseRay model.world (Camera.azimuth model.camera)
+                    targetCueBall mouseRay model.bodies (Camera.azimuth model.camera)
             in
             { model | state = Shooting (TargetingCueBall hitTarget) shot pool }
 
@@ -250,11 +248,11 @@ update window msg oldModel =
         ( Shooting aimingCue shot pool, ShootPressed ) ->
             let
                 axis =
-                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) shot
+                    cueAxis (cueBallPosition model.bodies) (Camera.azimuth model.camera) shot
             in
             -- the message can be sent many times
             -- we need to check if the button isn't already pressed
-            if Cue.canShoot model.world axis && shot.shootPressedAt == Nothing then
+            if Cue.canShoot model.bodies axis && shot.shootPressedAt == Nothing then
                 let
                     -- save the time the buttom was pressed
                     newShot =
@@ -269,16 +267,16 @@ update window msg oldModel =
         ( Shooting aimingCue shot pool, ShootReleased ) ->
             let
                 axis =
-                    cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) shot
+                    cueAxis (cueBallPosition model.bodies) (Camera.azimuth model.camera) shot
 
                 startTime =
                     Maybe.withDefault model.time shot.shootPressedAt
             in
-            if Cue.canShoot model.world axis then
+            if Cue.canShoot model.bodies axis then
                 { model
                     | state = Simulating [] pool
                     , camera = Camera.zoomOut model.camera
-                    , world = shoot axis startTime model.time model.world
+                    , bodies = shoot axis startTime model.time model.bodies
                 }
 
             else
@@ -286,35 +284,39 @@ update window msg oldModel =
 
         -- Simulate the physics!
         ( Simulating events pool, Tick time ) ->
-            case simulate time model.world events pool of
+            case simulate time model.bodies model.contacts events pool of
                 -- Continue simulating on the next tick
-                Continue ( newWorld, newEvents ) ->
+                Continue ( newBodies, newContacts, newEvents ) ->
                     { model
-                        | world = newWorld
+                        | bodies = newBodies
+                        , contacts = newContacts
                         , state = Simulating newEvents pool
                     }
 
                 -- Stop the simulation, decide what to do next!
                 Stop (EightBall.IllegalBreak newPool) ->
                     { model
-                        | world = initialWorld model.table -- Reset the table.
+                        | bodies = initialBodies model.table -- Reset the table.
+                        , contacts = Physics.emptyContacts
                         , state = initialState time newPool
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
 
                 Stop (EightBall.PlayersFault (EightBall.PlaceBallInHand newPool)) ->
                     { model
-                        | world = World.keepIf (\b -> Body.data b /= CueBall) model.world
+                        | bodies = List.filter (\( id, _ ) -> id /= CueBall) model.bodies
+                        , contacts = Physics.emptyContacts
                         , state = PlacingBall OutsideOfTable (Anywhere newPool)
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
 
                 Stop (EightBall.PlayersFault (EightBall.SpotEightBall newPool)) ->
                     { model
-                        | world =
-                            model.world
-                                |> World.keepIf (\b -> Body.data b /= CueBall)
+                        | bodies =
+                            model.bodies
+                                |> List.filter (\( id, _ ) -> id /= CueBall)
                                 |> Ball.spot Table.footSpot EightBall.eightBall
+                        , contacts = Physics.emptyContacts
                         , state = PlacingBall OutsideOfTable (BehindHeadString (EightBall.spotEightBall time newPool))
                         , camera = Camera.focusOn Point3d.origin model.camera
                     }
@@ -322,7 +324,7 @@ update window msg oldModel =
                 Stop (EightBall.NextShot newPool) ->
                     let
                         newFocalPoint =
-                            cueBallPosition model.world
+                            cueBallPosition model.bodies
                     in
                     { model
                         | state = Shooting (TargetingCueBall Nothing) initialShot newPool
@@ -386,8 +388,8 @@ preUpdate msg model =
 -- Placing ball in hand
 
 
-placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> World Id -> BallInHand
-placeBallInHand mouseRay spawnArea world =
+placeBallInHand : Axis3d Meters WorldCoordinates -> Rectangle3d Meters WorldCoordinates -> List ( Id, Body ) -> BallInHand
+placeBallInHand mouseRay spawnArea bodies =
     let
         -- raise the interection rectangles to vertically align with the center of the ball
         elevatedWholeTableArea =
@@ -402,7 +404,7 @@ placeBallInHand mouseRay spawnArea world =
         Just position ->
             case Axis3d.intersectionWithRectangle elevatedSpawnArea mouseRay of
                 Just _ ->
-                    placeBallInHandHelp (World.bodies world) position
+                    placeBallInHandHelp bodies position
 
                 Nothing ->
                     OnTable CannotPlace position
@@ -413,14 +415,14 @@ placeBallInHand mouseRay spawnArea world =
 
 {-| Check if overlaps with any of the numbered balls
 -}
-placeBallInHandHelp : List (Body Id) -> Point3d Meters WorldCoordinates -> BallInHand
+placeBallInHandHelp : List ( Id, Body ) -> Point3d Meters WorldCoordinates -> BallInHand
 placeBallInHandHelp bodies position =
     case bodies of
-        body :: remaining ->
-            case Body.data body of
+        ( id, body ) :: remaining ->
+            case id of
                 Numbered _ ->
                     if
-                        Body.originPoint body
+                        Physics.originPoint body
                             |> Point3d.distanceFrom position
                             |> Quantity.lessThan (Quantity.twice Ball.radius)
                     then
@@ -442,22 +444,16 @@ placeBallInHandHelp bodies position =
 
 {-| Pick a point on the cue ball to hit
 -}
-targetCueBall : Axis3d Meters WorldCoordinates -> World Id -> Angle -> Maybe HitTarget
-targetCueBall mouseRay world azimuth =
-    case World.raycast mouseRay world of
-        Just { body, normal } ->
+targetCueBall : Axis3d Meters WorldCoordinates -> List ( Id, Body ) -> Angle -> Maybe HitTarget
+targetCueBall mouseRay bodies azimuth =
+    case Physics.raycast mouseRay bodies of
+        Just ( id, _, { normal } ) ->
             let
-                frame =
-                    Body.frame body
-
-                hitNormal =
-                    Direction3d.placeIn frame normal
-
                 hitAzimuth =
-                    Direction3d.azimuthIn SketchPlane3d.xy hitNormal
+                    Direction3d.azimuthIn SketchPlane3d.xy normal
 
                 hitElevation =
-                    Direction3d.elevationFrom SketchPlane3d.xy hitNormal
+                    Direction3d.elevationFrom SketchPlane3d.xy normal
 
                 hitRelativeAzimuth =
                     hitAzimuth
@@ -468,7 +464,7 @@ targetCueBall mouseRay world azimuth =
                     -- Prevent from hoveing the back hemisphere when looking from the top
                     Quantity.lessThan (Angle.degrees 90) (Quantity.abs hitRelativeAzimuth)
             in
-            if Body.data body == CueBall && hoveringFrontHemisphere then
+            if id == CueBall && hoveringFrontHemisphere then
                 Just
                     { relativeAzimuth = hitRelativeAzimuth
                     , elevation = hitElevation
@@ -508,13 +504,12 @@ elevateCue originalPosition newPosition camera elevation =
 
 {-| Get the position of the cue ball from the world
 -}
-cueBallPosition : World Id -> Point3d Meters WorldCoordinates
-cueBallPosition world =
-    world
-        |> World.keepIf (\b -> Body.data b == CueBall)
-        |> World.bodies
+cueBallPosition : List ( Id, Body ) -> Point3d Meters WorldCoordinates
+cueBallPosition bodies =
+    bodies
+        |> List.filter (\( id, _ ) -> id == CueBall)
         |> List.head
-        |> Maybe.map Body.originPoint
+        |> Maybe.map (\( _, body ) -> Physics.originPoint body)
         |> Maybe.withDefault Point3d.origin
 
 
@@ -542,30 +537,35 @@ cueAxis ballPosition cameraAzimuth { hitTarget, cueElevation } =
 {-| Apply impulse to the cue ball depending on the shooting strength.
 The strength is calculated based on how long the spacebar has been pressed.
 -}
-shoot : Axis3d Meters WorldCoordinates -> Posix -> Posix -> World Id -> World Id
-shoot axis startTime endTime =
-    World.update
-        (\body ->
-            if Body.data body == CueBall then
-                let
-                    shootingAxis =
-                        Axis3d.reverse axis
+shoot : Axis3d Meters WorldCoordinates -> Posix -> Posix -> List ( Id, Body ) -> List ( Id, Body )
+shoot axis startTime endTime bodies =
+    let
+        shootingAxis =
+            Axis3d.reverse axis
 
-                    force =
-                        Quantity.interpolateFrom
-                            (Force.newtons 10)
-                            (Force.newtons 60)
-                            (shootingStrength startTime endTime)
-                in
-                Body.applyImpulse
-                    (Quantity.times (Duration.milliseconds 16) force)
-                    (Axis3d.direction shootingAxis)
-                    (Axis3d.originPoint shootingAxis)
-                    body
+        force =
+            Quantity.interpolateFrom
+                (Force.newtons 10)
+                (Force.newtons 60)
+                (shootingStrength startTime endTime)
+
+        impulse =
+            Vector3d.withLength
+                (Quantity.times (Duration.milliseconds 16) force)
+                (Axis3d.direction shootingAxis)
+
+        impulsePoint =
+            Axis3d.originPoint shootingAxis
+    in
+    List.map
+        (\( id, body ) ->
+            if id == CueBall then
+                ( id, Physics.applyImpulse impulse impulsePoint body )
 
             else
-                body
+                ( id, body )
         )
+        bodies
 
 
 {-| Returns a value from 0 to 1
@@ -584,152 +584,141 @@ shootingStrength startTime endTime =
 
 
 type SimulatedWorld
-    = Continue ( World Id, List ( Posix, ShotEvent ) )
+    = Continue ( List ( Id, Body ), Physics.Contacts Id, List ( Posix, ShotEvent ) )
     | Stop EightBall.WhatHappened
 
 
-simulate : Posix -> World Id -> List ( Posix, ShotEvent ) -> Pool EightBall.AwaitingPlayerShot -> SimulatedWorld
-simulate time world events pool =
+simulate : Posix -> List ( Id, Body ) -> Physics.Contacts Id -> List ( Posix, ShotEvent ) -> Pool EightBall.AwaitingPlayerShot -> SimulatedWorld
+simulate time bodies contacts events pool =
     let
         ballsStoppedMoving =
             List.all
-                (\body ->
-                    Body.velocity body
+                (\( _, body ) ->
+                    Physics.velocity body
                         |> Vector3d.length
                         |> Quantity.lessThan (Speed.metersPerSecond 0.0005)
                 )
-                (World.bodies world)
+                bodies
     in
     if ballsStoppedMoving then
         Stop (EightBall.playerShot (List.reverse events) pool)
 
     else
-        Continue (simulateWithEvents 2 time world events)
+        Continue (simulateWithEvents 2 time bodies contacts events)
 
 
 {-| Simulate multiple frames and collect the game events
 -}
-simulateWithEvents : Int -> Posix -> World Id -> List ( Posix, ShotEvent ) -> ( World Id, List ( Posix, ShotEvent ) )
-simulateWithEvents frame time world events =
+simulateWithEvents : Int -> Posix -> List ( Id, Body ) -> Physics.Contacts Id -> List ( Posix, ShotEvent ) -> ( List ( Id, Body ), Physics.Contacts Id, List ( Posix, ShotEvent ) )
+simulateWithEvents frame time bodies contacts events =
     if frame > 0 then
         let
             frozen =
                 -- Frozen balls from before the simulation
-                frozenBalls world
+                frozenBalls contacts
 
             frozenCue =
                 -- Frozen cue ball from before the simulation
-                frozenCueBall world
+                frozenCueBall contacts
 
-            simulatedWorld =
+            ( simulatedBodies, newContacts ) =
                 -- Simulate at shorter interval to prevent tunneling
-                World.simulate (Duration.seconds (1 / 120)) world
+                Physics.simulate (simulationConfig contacts) bodies
 
-            contacts =
-                World.contacts simulatedWorld
-
-            ( newEvents, newWorld ) =
+            ( newEvents, finalBodies ) =
                 List.foldl
-                    (\contact ( currentEvents, currentWorld ) ->
-                        let
-                            ( b1, b2 ) =
-                                Contact.bodies contact
-                        in
-                        case ( Body.data b1, Body.data b2 ) of
+                    (\( id1, id2, _ ) ( currentEvents, currentBodies ) ->
+                        case ( id1, id2 ) of
                             ( Numbered ball, Pocket ) ->
                                 ( EightBall.ballFellInPocket time ball :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
+                                , List.filter (\( id, _ ) -> id /= Numbered ball) currentBodies
                                 )
 
                             ( Pocket, Numbered ball ) ->
                                 ( EightBall.ballFellInPocket time ball :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
+                                , List.filter (\( id, _ ) -> id /= Numbered ball) currentBodies
                                 )
 
                             ( Numbered ball, Floor ) ->
                                 ( EightBall.ballOffTable time ball :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
+                                , List.filter (\( id, _ ) -> id /= Numbered ball) currentBodies
                                 )
 
                             ( Floor, Numbered ball ) ->
                                 ( EightBall.ballOffTable time ball :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= Numbered ball) currentWorld
+                                , List.filter (\( id, _ ) -> id /= Numbered ball) currentBodies
                                 )
 
                             ( CueBall, Floor ) ->
                                 ( EightBall.scratch time :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
+                                , List.filter (\( id, _ ) -> id /= CueBall) currentBodies
                                 )
 
                             ( Floor, CueBall ) ->
                                 ( EightBall.scratch time :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
+                                , List.filter (\( id, _ ) -> id /= CueBall) currentBodies
                                 )
 
                             ( Pocket, CueBall ) ->
                                 ( EightBall.scratch time :: currentEvents
-                                , World.keepIf (\b -> Body.data b /= CueBall) currentWorld
+                                , List.filter (\( id, _ ) -> id /= CueBall) currentBodies
                                 )
 
                             ( CueBall, Numbered ball ) ->
-                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
+                                ( EightBall.cueHitBall time ball :: currentEvents, currentBodies )
 
                             ( Numbered ball, CueBall ) ->
-                                ( EightBall.cueHitBall time ball :: currentEvents, currentWorld )
+                                ( EightBall.cueHitBall time ball :: currentEvents, currentBodies )
 
                             --(Numbered _, Numbered _) ->
-                            --    (EightBall.ballsCollided time, currentWorld)
+                            --    (EightBall.ballsCollided time, currentBodies)
                             ( Cushion, Numbered ball ) ->
                                 if not (Set.member (EightBall.ballNumber ball) frozen) then
-                                    ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+                                    ( EightBall.ballHitWall time ball :: currentEvents, currentBodies )
 
                                 else
-                                    ( currentEvents, currentWorld )
+                                    ( currentEvents, currentBodies )
 
                             ( Numbered ball, Cushion ) ->
                                 if not (Set.member (EightBall.ballNumber ball) frozen) then
-                                    ( EightBall.ballHitWall time ball :: currentEvents, currentWorld )
+                                    ( EightBall.ballHitWall time ball :: currentEvents, currentBodies )
 
                                 else
-                                    ( currentEvents, currentWorld )
+                                    ( currentEvents, currentBodies )
 
                             ( Cushion, CueBall ) ->
                                 if not frozenCue then
-                                    ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+                                    ( EightBall.cueHitWall time :: currentEvents, currentBodies )
 
                                 else
-                                    ( currentEvents, currentWorld )
+                                    ( currentEvents, currentBodies )
 
                             ( CueBall, Cushion ) ->
                                 if not frozenCue then
-                                    ( EightBall.cueHitWall time :: currentEvents, currentWorld )
+                                    ( EightBall.cueHitWall time :: currentEvents, currentBodies )
 
                                 else
-                                    ( currentEvents, currentWorld )
+                                    ( currentEvents, currentBodies )
 
                             _ ->
-                                ( currentEvents, currentWorld )
+                                ( currentEvents, currentBodies )
                     )
-                    ( events, simulatedWorld )
-                    contacts
+                    ( events, simulatedBodies )
+                    (Physics.contactPoints (\_ _ -> True) newContacts)
         in
-        simulateWithEvents (frame - 1) time newWorld newEvents
+        simulateWithEvents (frame - 1) time finalBodies newContacts newEvents
 
     else
-        ( world, events )
+        ( bodies, contacts, events )
 
 
 {-| Find the frozen balls, that are touching the walls
 -}
-frozenBalls : World Id -> Set Int
-frozenBalls world =
+frozenBalls : Physics.Contacts Id -> Set Int
+frozenBalls contacts =
     List.foldl
-        (\contact frozen ->
-            let
-                ( b1, b2 ) =
-                    Contact.bodies contact
-            in
-            case ( Body.data b1, Body.data b2 ) of
+        (\( id1, id2, _ ) frozen ->
+            case ( id1, id2 ) of
                 ( Cushion, Numbered ball ) ->
                     Set.insert (EightBall.ballNumber ball) frozen
 
@@ -740,20 +729,16 @@ frozenBalls world =
                     frozen
         )
         Set.empty
-        (World.contacts world)
+        (Physics.contactPoints (\_ _ -> True) contacts)
 
 
 {-| Find out if the cue ball is touching the wall.
 -}
-frozenCueBall : World Id -> Bool
-frozenCueBall world =
+frozenCueBall : Physics.Contacts Id -> Bool
+frozenCueBall contacts =
     List.any
-        (\contact ->
-            let
-                ( b1, b2 ) =
-                    Contact.bodies contact
-            in
-            case ( Body.data b1, Body.data b2 ) of
+        (\( id1, id2, _ ) ->
+            case ( id1, id2 ) of
                 ( Cushion, CueBall ) ->
                     True
 
@@ -763,7 +748,7 @@ frozenCueBall world =
                 _ ->
                     False
         )
-        (World.contacts world)
+        (Physics.contactPoints (\_ _ -> True) contacts)
 
 
 
@@ -807,7 +792,7 @@ view ballTextures roughnessTexture table window model =
         entities =
             List.map
                 (bodyToEntity roughnessTexture ballTextures table)
-                (World.bodies model.world)
+                model.bodies
 
         dimensions =
             window
@@ -845,10 +830,10 @@ view ballTextures roughnessTexture table window model =
                 Shooting _ cue _ ->
                     let
                         axis =
-                            cueAxis (cueBallPosition model.world) (Camera.azimuth model.camera) cue
+                            cueAxis (cueBallPosition model.bodies) (Camera.azimuth model.camera) cue
 
                         color =
-                            if Cue.canShoot model.world axis then
+                            if Cue.canShoot model.bodies axis then
                                 Color.white
 
                             else
@@ -886,10 +871,10 @@ view ballTextures roughnessTexture table window model =
         ]
 
 
-bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Table -> Body Id -> Entity WorldCoordinates
-bodyToEntity roughnessTexture ballTextures table body =
-    Scene3d.placeIn (Body.frame body) <|
-        case Body.data body of
+bodyToEntity : Material.Texture Float -> Dict Int (Material.Texture Color) -> Table -> ( Id, Body ) -> Entity WorldCoordinates
+bodyToEntity roughnessTexture ballTextures table ( id, body ) =
+    Scene3d.placeIn (Physics.frame body) <|
+        case id of
             Numbered ball ->
                 let
                     baseColor =

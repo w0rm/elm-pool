@@ -6,15 +6,13 @@ import Axis3d
 import Bodies exposing (Id(..))
 import Circle2d exposing (Circle2d)
 import Color exposing (Color)
+import Density
 import Direction2d
 import Direction3d
 import EightBall exposing (Ball)
 import Length exposing (Length, Meters)
-import Mass exposing (Mass)
-import Physics.Body as Body exposing (Body)
-import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
-import Physics.Material as Material exposing (Material)
-import Physics.World as World exposing (World)
+import Physics exposing (Body, BodyCoordinates, WorldCoordinates)
+import Physics.Material as Material exposing (Dense, Material)
 import Point2d exposing (Point2d)
 import Point3d
 import Quantity
@@ -31,11 +29,6 @@ radius =
     Length.millimeters (57.15 / 2)
 
 
-weight : Mass
-weight =
-    Mass.grams 170
-
-
 {-| The perfect sphere keeps rolling on the perfect plane,
 we need to damp the angular velocity to make it stop.
 -}
@@ -44,22 +37,22 @@ damping =
     { linear = 0.4, angular = 0.4 }
 
 
-material : Material
+material : Material Dense
 material =
-    Material.custom
-        { friction = 0.06
+    -- chosen to give a regulation 170 g ball at 57.15 mm diameter
+    Material.dense
+        { density = Density.kilogramsPerCubicMeter 1739.43
+        , friction = 0.06
         , bounciness = 0.6
         }
 
 
-body : id -> Body id
-body id =
-    Body.sphere (Sphere3d.atOrigin radius) id
-        |> Body.withMaterial material
-        |> Body.withDamping damping
-        |> Body.withBehavior (Body.dynamic weight)
+body : Body
+body =
+    Physics.sphere (Sphere3d.atOrigin radius) material
+        |> Physics.damp damping
         -- rotate to see the numbers on the balls
-        |> Body.rotateAround Axis3d.x (Angle.degrees 90)
+        |> Physics.rotateAround Axis3d.x (Angle.degrees 90)
 
 
 entity : Material.Texture Color -> Material.Texture Float -> Entity BodyCoordinates
@@ -76,7 +69,7 @@ entity baseColor roughnessTexture =
 
 {-| Rack the balls at the foot spot on the table
 -}
-rack : Point2d Meters WorldCoordinates -> List (Body Id)
+rack : Point2d Meters WorldCoordinates -> List ( Id, Body )
 rack footSpot =
     let
         -- TODO: randomly shuffle the balls?
@@ -117,15 +110,15 @@ rack footSpot =
             )
         |> List.filterMap
             (\( maybeId, pos ) ->
-                Maybe.map (body >> Body.moveTo pos) maybeId
+                Maybe.map (\id -> ( id, body |> Physics.moveTo pos )) maybeId
             )
 
 
 {-| Place a spotted ball on the line behind the foot spot,
 such that it doesn't collide with existing balls
 -}
-spot : Point2d Meters WorldCoordinates -> Ball -> World Id -> World Id
-spot footSpot spottedBall world =
+spot : Point2d Meters WorldCoordinates -> Ball -> List ( Id, Body ) -> List ( Id, Body )
+spot footSpot spottedBall bodies =
     let
         -- the line behind the foot spot
         axis =
@@ -147,16 +140,15 @@ spot footSpot spottedBall world =
         --  a1 (f) a2  b1  b2  c1 c2      |
         --    foot spot   ----->      foot rail
         occupiedRanges =
-            world
-                |> World.bodies
+            bodies
                 |> List.filterMap
-                    (\b ->
-                        case Body.data b of
+                    (\( id, b ) ->
+                        case id of
                             Numbered _ ->
-                                occupiedRange (Body.originPoint b)
+                                occupiedRange (Physics.originPoint b)
 
                             CueBall ->
-                                occupiedRange (Body.originPoint b)
+                                occupiedRange (Physics.originPoint b)
 
                             _ ->
                                 Nothing
@@ -200,8 +192,7 @@ spot footSpot spottedBall world =
                 |> Point3d.on SketchPlane3d.xy
                 |> Point3d.translateIn Direction3d.z radius
     in
-    world
-        |> World.add (body (Numbered spottedBall) |> Body.moveTo spawnLocation)
+    ( Numbered spottedBall, body |> Physics.moveTo spawnLocation ) :: bodies
 
 
 intersectBy : Axis2d Meters coordinates -> Circle2d Meters coordinates -> Maybe ( Length, Length )

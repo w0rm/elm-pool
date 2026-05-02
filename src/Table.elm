@@ -29,10 +29,10 @@ import Frame3d
 import Http
 import Length exposing (Length, Meters)
 import Obj.Decode exposing (Decoder)
-import Physics.Body as Body exposing (Body)
-import Physics.Coordinates exposing (BodyCoordinates, WorldCoordinates)
+import Physics exposing (Body, BodyCoordinates, WorldCoordinates)
 import Physics.Material
 import Physics.Shape as Shape
+import Plane3d
 import Point2d exposing (Point2d)
 import Point3d
 import Quantity
@@ -48,7 +48,7 @@ import Task exposing (Task)
 {-| The visual entity and the collider bodies used in simulation
 -}
 type alias Table =
-    { bodies : List (Body Id)
+    { bodies : List ( Id, Body )
     , entity : Entity BodyCoordinates
     }
 
@@ -104,25 +104,27 @@ tableDecoder =
                 height =
                     0.75
 
+                tableMaterial =
+                    Physics.Material.surface { friction = 0.8, bounciness = 0 }
+
+                cushionMaterial =
+                    Physics.Material.surface { friction = 0.1, bounciness = 0.8 }
+
                 bodies =
-                    [ Body.plane Floor
-                        -- distance from the floor until the top of the table
-                        |> Body.moveTo (Point3d.meters 0 0 -height)
-                    , Body.compound (List.map Shape.unsafeConvex tableConvexes) Bodies.Table
-                        |> Body.withMaterial
-                            (Physics.Material.custom
-                                { friction = 0.8
-                                , bounciness = 0
-                                }
-                            )
-                    , Body.compound (List.map Shape.unsafeConvex cushionsConvexes) Cushion
-                        |> Body.withMaterial
-                            (Physics.Material.custom
-                                { friction = 0.1
-                                , bounciness = 0.8
-                                }
-                            )
-                    , Body.compound [ Shape.unsafeConvex pocketsConvex ] Pocket
+                    [ ( Floor
+                      , Physics.plane Plane3d.xy Physics.Material.wood
+                            -- distance from the floor until the top of the table
+                            |> Physics.moveTo (Point3d.meters 0 0 -height)
+                      )
+                    , ( Bodies.Table
+                      , Physics.static (List.map (\m -> ( Shape.unsafeConvex m, tableMaterial )) tableConvexes)
+                      )
+                    , ( Cushion
+                      , Physics.static (List.map (\m -> ( Shape.unsafeConvex m, cushionMaterial )) cushionsConvexes)
+                      )
+                    , ( Pocket
+                      , Physics.static [ ( Shape.unsafeConvex pocketsConvex, Physics.Material.wood ) ]
+                      )
                     ]
             in
             \material ->
